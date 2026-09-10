@@ -30,3 +30,10 @@
 ### AccessDenied
 
 - **优先检查**：RAM 用户是否具备当前 Bucket 的 List/Get/Put 权限，以及 Resource 范围是否覆盖当前 Prefix。
+
+## 2026-09-10 — Tauri 构建参数转发
+
+- **现象**：`npm run build:desktop -- --locked` 报 unexpected argument。
+- **根因**：`--locked` 是 Cargo 参数，需要越过 npm 与 Tauri 两层参数解析。
+- **修复**：使用 `npm run build:desktop -- -- --locked`，CI 同步使用此命令。
+- **验证**：修正后通过前端构建并进入 Cargo 编译。

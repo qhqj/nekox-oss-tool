@@ -273,7 +273,7 @@ function onTitlebarMouseDown(event: MouseEvent) {
   <div class="app-shell" :class="{ 'is-desktop': isDesktop }" data-theme="light">
     <header class="app-chrome" data-tauri-drag-region="" @mousedown="onTitlebarMouseDown" @dblclick="onTitlebarDblClick">
       <div class="chrome-brand-block" data-tauri-drag-region="">
-        <div class="brand-mark">N</div>
+        <img class="brand-mark" src="/app-icon.svg" alt="" />
         <span class="chrome-title">Nekox OSS Tool</span>
       </div>
 
@@ -286,6 +286,7 @@ function onTitlebarMouseDown(event: MouseEvent) {
 
     <main class="workspace">
       <aside class="sidebar">
+        <div class="sidebar-brand"><img src="/app-icon.svg" alt="" /><div><strong>Nekox</strong><span>OSS 文件工作台</span></div></div>
         <div class="sidebar-title">
           <span>目录导航</span>
           <small>按需加载</small>
@@ -360,9 +361,10 @@ function onTitlebarMouseDown(event: MouseEvent) {
         </div>
 
         <div v-if="!connected" class="empty-state">
-          <div class="empty-icon">↥</div>
-          <h2>连接 OSS 后开始使用</h2>
-          <p>配置 Region、Bucket 与访问凭证；连接成功后仅加载文件名与大小。</p>
+          <img class="welcome-icon" src="/app-icon.svg" alt="Nekox OSS Tool" />
+          <span class="welcome-eyebrow">NEKOX OSS TOOL</span>
+          <h2>让云端文件，触手可及</h2>
+          <p>连接你的阿里云 OSS，轻松浏览、上传与分享文件。</p>
           <button class="primary-button" type="button" @click="configOpen = true">打开连接配置</button>
         </div>
 

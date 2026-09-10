@@ -1,124 +1,69 @@
-# nekox-oss-tool
+<p align="center"><img src="public/app-icon.svg" width="96" alt="Nekox OSS Tool" /></p>
+<h1 align="center">Nekox OSS Tool</h1>
+<p align="center">一个轻巧、专注的阿里云 OSS 个人桌面文件工具。</p>
+<p align="center">中文 · <a href="README.en.md">English</a> · <a href="https://github.com/qhqj/nekox-oss-tool/releases/latest">下载安装包</a></p>
 
-一个纯前端、面向本地/内网使用的阿里云 OSS 快速文件工具。
+## 安装
 
-## 已包含
+在 [Releases](https://github.com/qhqj/nekox-oss-tool/releases) 下载 `Nekox-OSS-Tool-版本-windows-x64-setup.exe`，双击安装。安装向导支持简体中文和英文，可选择安装位置，按当前用户安装。
 
-- Vue 3 + Vite + TypeScript。
-- 浏览器直接连接阿里云 OSS。
-- Region / Bucket / AccessKey ID / AccessKey Secret / STS Token / Endpoint / 公共域名可在 UI 中修改。
-- 凭证默认只存在当前页面内存，不写入 localStorage。
-- 文件夹按需浏览；目录列表默认只显示文件名与大小。
-- 不生成缩略图、不自动预览、不自动下载对象内容。
-- 上传弹窗：选择文件、修改上传文件名、显示目标路径。
-- 同名文件自动重命名：`a.png` → `a (1).png` → `a (2).png`。
-- 大文件自动使用 multipartUpload，并显示上传进度。
-- 上传完成后输出公共访问 URL，可一键复制。
-- 文件操作只保留“复制链接 / 下载”；首版不做删除、移动、重命名，避免误操作。
-- 单目录超过 300 项时支持继续翻页。
+- 面向 Windows 10 / 11 x64，依赖 Microsoft Edge WebView2；缺失时安装程序会联网下载运行环境。
+- 当前安装包没有代码签名证书，Windows 可能显示未知发布者提示。
+- 软件界面为中文；英文 README 和英文安装向导不代表软件已提供英文界面。
 
-## 快速启动
+## 功能
+
+- 连接 OSS：支持 Region、Bucket、AccessKey、STS Token、自定义 Endpoint 与公共域名，粘贴 OSS 域名可识别 Bucket 和地域。
+- 按目录 Prefix 浏览，使用 `delimiter=/`，每页最多 300 项；只读取文件名和大小元数据。
+- 上传至当前目录，可修改文件名；同名时按 `name (n).ext` 尝试避让并提示最终 Key。
+- 8 MiB 及以上文件使用分片上传，显示进度与结果。
+- 复制公共 URL，主动点击才预览图片或下载文件；桌面下载支持保存位置选择。
+- 保留个人连接配置，下次启动自动尝试连接。暖色界面、统一应用图标、原生窗口控制。
+- 无业务后端，无自动缩略图，无删除功能。
+
+## 首次使用
+
+1. 打开连接配置，填写自己的 Region、Bucket、AccessKey ID / Secret；使用临时凭证时同时填写 STS Token。
+2. 点击“连接并刷新”，进入目录后上传文件或复制链接。
+3. 需要公共链接时，对象必须能够匿名访问，或填写可公开访问的 CDN 基础地址。私有对象的下载使用短期签名 URL。
+
+这是**单人桌面应用**：连接信息（包含 AccessKey Secret 和 STS Token）会以未加密形式保存在本机 WebView 存储中。仅在自己的可信电脑上使用，不要分享应用用户数据目录。源码与安装包不包含你的实际凭证。STS 过期后需要重新填写。
+
+桌面端仍通过 WebView 直接请求 OSS，因此 Bucket 可能需要配置 CORS。发生跨域错误时，按应用错误提示中的实际 Origin 设置允许来源；允许所需 GET / PUT / POST / HEAD、请求头，以及暴露 `ETag`、`x-oss-request-id` 等响应头。按实际上传方式为专用 RAM 身份配置目标 Bucket 的列表、读取、写入及所需分片操作权限。
+
+同名检测与上传不是原子操作，多客户端同时写同一 Key 时仍可能竞争。下载先在内存中读取完整文件，因此超大文件受可用内存限制。
+
+## 本地开发与打包
+
+需要 Node.js 22+、Rust stable MSVC、Visual Studio C++ Build Tools 和 WebView2。项目使用 Vue 3、Vite、TypeScript、ali-oss Browser SDK 和 Tauri 2。
 
 ```bash
-npm install
-npm run dev
+npm ci
+npm run dev:desktop
 ```
 
-构建静态文件：
-
 ```bash
+npm run typecheck
 npm run build
+npm run build:desktop
 ```
 
-产物位于 `dist/`，可直接交给 Nginx / 宝塔静态站点托管。
+NSIS 安装包位于 `src-tauri/target/release/bundle/nsis/`。本次交付另提供 `install/setup.exe`；`install/` 不提交 Git，安装包通过 Releases 分发。`npm run dev` 仅用于前端开发预览。
 
-## OSS 侧需要准备
+图标源文件为 `public/app-icon.svg`，重新生成各尺寸图标：
 
-### 1. CORS
-
-浏览器会直接请求 OSS，Bucket 必须配置 CORS。建议：
-
-- Allowed Origins：本地开发域名与实际部署域名，例如 `http://localhost:5173`、`https://oss-tool.example.com`。
-- Allowed Methods：`GET`、`PUT`、`POST`、`HEAD`。
-- Allowed Headers：`*`。
-- Expose Headers：至少可加入 `ETag`、`x-oss-request-id`、`x-oss-version-id`。
-
-### 2. 权限
-
-不要使用主账号 AccessKey。建议创建专用 RAM 用户，并且只给目标 Bucket 必要权限：
-
-- `oss:ListObjects`
-- `oss:GetObject`
-- `oss:PutObject`
-
-如果未来增加删除/移动，再单独追加对应权限，不要预先放大权限。
-
-### 3. 公共读
-
-本工具上传完成后给出的“公共链接”假设对象可以匿名读取：
-
-- Bucket / 对象 ACL 已允许公共读；或
-- 已配置可公开访问的 CDN / 自定义域名，并在“公共访问基础地址”中填写。
-
-如果 Bucket 是私有读，“复制公共链接”不会自动变成长期可访问链接；下载按钮则使用当前凭证生成短期签名 URL。
-
-## 安全边界
-
-**纯前端静态 AccessKey Secret 会暴露给浏览器环境。**
-
-当前项目保留 AccessKey ID / Secret 输入，是为了满足可信本地工具、内网工具、个人运维页等快速场景；不建议把长期 Secret 直接部署到公开网站并交给不受信任用户使用。
-
-正式公网场景建议保持前端不变，仅把认证方式换成：
-
-1. 前端向一个极小的 STS 接口获取临时凭证；
-2. 用临时 `AccessKeyId + AccessKeySecret + SecurityToken` 初始化 OSS SDK；
-3. 临时权限只允许指定 Bucket / Prefix / 操作，并设置较短有效期。
-
-项目已经预留 `STS Token` 字段，后续改造不会影响文件浏览和上传模块。
-
-## 设计取舍
-
-### 为什么目录页不做预览
-
-本工具目标是“快速上传和定位对象”，不是图库。目录浏览只请求对象列表元数据，避免用户只是打开页面就触发大量文件 GET 和外网流量。
-
-### 为什么首版不做删除
-
-上传工具最容易出现的高风险操作是误删，尤其当使用高权限 AccessKey 时。首版主动收窄为 List / Get / Put，后续确实需要再加入删除，并增加二次确认与权限开关。
-
-## 可以继续补充的功能
-
-建议按需要再做，不要首版一次堆满：
-
-- 拖拽上传 / 多文件队列。
-- 上传到指定 Prefix，而不必先进入目录。
-- 新建“目录”占位对象。
-- 最近上传记录（只保存 key / URL，不保存凭证）。
-- 自定义上传 Content-Type / Cache-Control。
-- 文件搜索（Prefix 搜索）。
-- 删除 / 移动 / 重命名（必须独立开关 + 二次确认）。
-- STS 自动刷新。
-- 多 Bucket 配置档案，但敏感凭证仍不持久化。
-
-## 目录结构
-
-```text
-nekox-oss-tool/
-├─ src/
-│  ├─ components/
-│  │  ├─ ConfigModal.vue
-│  │  └─ UploadModal.vue
-│  ├─ services/
-│  │  └─ oss.ts
-│  ├─ types/
-│  │  └─ oss.ts
-│  ├─ utils/
-│  │  └─ file.ts
-│  ├─ App.vue
-│  ├─ main.ts
-│  └─ style.css
-├─ AGENTS.md
-├─ ERROR.md
-├─ package.json
-└─ vite.config.ts
+```bash
+npx tauri icon public/app-icon.svg
 ```
+
+## 发布
+
+`.github/workflows/release.yml` 在推送 `v*` 标签时执行 Windows 类型检查、前端与 NSIS 构建，上传安装包和 SHA-256 校验文件到 GitHub Release。发布前保持 `package.json`、`package-lock.json`、`src-tauri/Cargo.toml`、`src-tauri/Cargo.lock` 和 `src-tauri/tauri.conf.json` 的应用版本一致。
+
+```bash
+git push origin main
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+后续版本使用新的版本号与标签；发布记录不提供应用内自动更新。

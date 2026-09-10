@@ -60,14 +60,14 @@ function submit() {
           <div class="modal-icon">☁</div>
           <div>
             <h2>OSS 连接配置</h2>
-            <p>连接信息会保存在本机，下次启动自动恢复；请勿在不可信设备上使用。</p>
+            <p>连接信息保存在本机，下次启动自动恢复连接。</p>
           </div>
         </div>
         <button class="icon-button" type="button" aria-label="关闭" :disabled="connecting" @click="emit('close')">×</button>
       </header>
 
       <div class="security-note">
-        本地桌面工具会将 AccessKey 保存在本机存储中。若部署为公网网页，请勿启用完整凭证持久化。
+        仅供个人桌面使用：AccessKey 和 STS Token 会保存在本机，请仅在你信任的电脑上使用。
       </div>
 
       <div class="form-grid">
@@ -85,7 +85,7 @@ function submit() {
           <span>Bucket（示例：my-bucket，仅填名称）</span>
           <input
             v-model="form.bucket"
-            placeholder="my-bucket 或粘贴 geekzenalioss.oss-cn-beijing.aliyuncs.com"
+            placeholder="my-bucket 或粘贴 my-bucket.oss-cn-beijing.aliyuncs.com"
             autocomplete="off"
             @paste="onHostPaste"
             @blur="onHostBlur('bucket')"

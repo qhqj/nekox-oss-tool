@@ -1165,3 +1165,37 @@ label small {
   .list-head, .file-row { grid-template-columns: minmax(280px, 1fr) 90px 170px; }
   .path-code { display: none; }
 }
+
+/* Shared desktop brand, with no remote fonts or object previews. */
+.app-chrome { height: 40px; background: #f7f2e9; }
+.chrome-brand-block { gap: 9px; padding-inline: 15px; }
+.chrome-title { color: var(--text-2); font-weight: 600; letter-spacing: .2px; }
+.brand-mark { width: 23px; height: 23px; background: transparent; }
+.win-btn { height: 40px; }
+.sidebar { background: linear-gradient(165deg, #f1eade, #eae3d7); }
+.sidebar-brand { display: flex; gap: 12px; align-items: center; padding: 10px 4px 27px; }
+.sidebar-brand img { width: 43px; height: 43px; }
+.sidebar-brand strong { display: block; font-size: 21px; letter-spacing: -.6px; }
+.sidebar-brand span { display: block; margin-top: 3px; color: var(--text-2); font-size: 11px; letter-spacing: 1px; }
+.content-panel { margin: 12px 12px 12px 0; border: 1px solid var(--border); border-radius: 14px; overflow: hidden; box-shadow: 0 4px 20px #3c322308; }
+.path-toolbar { padding-block: 17px; }
+.toolbar-btn { padding: 7px 11px; }
+.welcome-icon { display: block; margin: 0 auto 23px; width: 88px; height: 88px; margin-bottom: 23px; filter: drop-shadow(0 12px 18px #a34d3224); }
+.welcome-eyebrow { color: var(--accent); font-size: 10px; letter-spacing: 3px; font-weight: 700; }
+.empty-state h2 { font-size: 25px; letter-spacing: -.5px; margin-top: 14px; }
+.empty-state p { max-width: 360px; line-height: 1.9; }
+.empty-state .primary-button { margin-top: 13px; padding: 11px 22px; }
+button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
+.file-row { transition: background .15s ease; }
+@media (max-width: 760px) {
+  .sidebar { display: none; }
+  .content-panel { margin: 8px; }
+  .path-toolbar { flex-wrap: wrap; gap: 12px; }
+  .toolbar-group { flex-wrap: wrap; }
+  .conn-indicator { max-width: 160px; }
+  .list-head, .file-row { grid-template-columns: minmax(120px, 1fr) 65px 150px; }
+  .empty-state h2 { font-size: 21px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; transition: none !important; }
+}

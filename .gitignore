@@ -7,3 +7,5 @@ src-tauri/gen/
 .env
 .env.*
 !.env.example
+
+install/
