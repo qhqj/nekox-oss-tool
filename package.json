@@ -1,0 +1,30 @@
+{
+  "name": "nekox-oss-tool",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "dev:web": "vite --host 0.0.0.0",
+    "dev:desktop": "tauri dev",
+    "build": "vue-tsc --noEmit && vite build",
+    "build:desktop": "tauri build",
+    "preview": "vite preview --host 0.0.0.0",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "^2.11.1",
+    "@tauri-apps/plugin-dialog": "^2.7.3",
+    "@tauri-apps/plugin-fs": "^2.5.2",
+    "@tauri-apps/plugin-shell": "^2.3.6",
+    "ali-oss": "^6.23.0",
+    "vue": "^3.5.20"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.11.4",
+    "@vitejs/plugin-vue": "^6.0.1",
+    "typescript": "^5.9.2",
+    "vite": "^7.1.5",
+    "vue-tsc": "^3.0.6"
+  }
+}
