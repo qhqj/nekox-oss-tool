@@ -9,3 +9,5 @@ src-tauri/gen/
 !.env.example
 
 install/
+.tools/
+test-results/

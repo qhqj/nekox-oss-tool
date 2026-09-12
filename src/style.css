@@ -1199,3 +1199,11 @@ button:focus-visible, input:focus-visible { outline: 2px solid var(--accent); ou
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation: none !important; transition: none !important; }
 }
+
+.account-switcher { display: grid; gap: 9px; margin: 0 0 24px; padding: 13px; background: #ffffff50; border: 1px solid var(--border); border-radius: 10px; }
+.account-switcher select { width: 100%; min-width: 0; padding: 8px; border: 1px solid var(--border); border-radius: 7px; color: var(--text); background: var(--bg-app); font-size: 12px; }
+.account-switcher p { margin: 0; color: var(--text-2); font-size: 11px; line-height: 1.6; overflow-wrap: anywhere; max-height: 54px; overflow: auto; }
+.account-switcher .secondary-button { text-align: left; }
+.toolbar-group { flex-wrap: wrap; }
+.path-toolbar { flex-wrap: wrap; }
+select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }

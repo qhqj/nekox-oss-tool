@@ -1,19 +1,28 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, shallowRef } from 'vue'
 import ConfigModal from './components/ConfigModal.vue'
 import ImagePreviewModal from './components/ImagePreviewModal.vue'
 import UploadModal from './components/UploadModal.vue'
 import WindowControls from './components/WindowControls.vue'
 import { OssBrowserService } from './services/oss'
-import type { OssConfig, OssEntry, UploadResult } from './types/oss'
+import type { OssConfig, OssEntry } from './types/oss'
+import type { AccountState, OssAccount } from './types/accounts'
 import { downloadToUserDevice } from './utils/download'
-import { canAutoConnect, createInitialConfig, hasPersistedConfig, savePersistedConfig } from './utils/config-storage'
+import { canAutoConnect, createInitialConfig, loadAccounts, saveAccounts } from './utils/config-storage'
 import { formatBytes, isImageFile } from './utils/file'
 import { isDesktopShell, startWindowDrag, toggleMaximizeWindow } from './utils/windowControls'
 
 const isDesktop = isDesktopShell()
 
-const service = new OssBrowserService()
+const service = shallowRef(new OssBrowserService())
+const accounts = ref<OssAccount[]>([])
+const activeAccountId = ref('')
+const configAccountId = ref('')
+const connectedAccount = ref<OssAccount | null>(null)
+const initializing = ref(true)
+const storageReady = ref(false)
+const accountBusy = computed(() => initializing.value || connecting.value || uploadOpen.value || Boolean(downloadingKey.value))
+const accountLabel = computed(() => connectedAccount.value ? `${connectedAccount.value.name} · ${connectedAccount.value.config.bucket}` : '未连接账号')
 
 const config = reactive<OssConfig>(createInitialConfig())
 
@@ -33,9 +42,7 @@ const pageIndex = ref(1)
 
 const uploadOpen = ref(false)
 const uploading = ref(false)
-const uploadProgress = ref(0)
-const uploadError = ref('')
-const uploadResult = ref<UploadResult | null>(null)
+const uploadPrefix = ref('')
 const toast = ref('')
 const downloadingKey = ref('')
 const previewOpen = ref(false)
@@ -43,6 +50,7 @@ const previewName = ref('')
 const previewUrl = ref('')
 const previewError = ref('')
 let toastTimer = 0
+let listRequest = 0
 
 const folders = computed(() => entries.value.filter((entry) => entry.type === 'folder'))
 
@@ -70,38 +78,132 @@ const breadcrumbs = computed(() => {
 })
 
 onMounted(async () => {
-  if (!hasPersistedConfig()) {
+  try {
+    const state = await loadAccounts()
+    accounts.value = state.accounts
+    activeAccountId.value = state.activeAccountId
+    storageReady.value = true
+    const account = state.accounts.find((item) => item.id === state.activeAccountId)
+    initializing.value = false
+    if (account && canAutoConnect(account.config)) await connect(account)
+    else configOpen.value = true
+    if (state.storageWarning) {
+      configError.value = state.storageWarning
+      configOpen.value = true
+    }
+  } catch (error) {
+    configError.value = toMessage(error)
     configOpen.value = true
-    return
-  }
-
-  if (canAutoConnect(config)) {
-    await connect({ ...config })
-    if (!connected.value) configOpen.value = true
-  } else {
-    configOpen.value = true
+  } finally {
+    initializing.value = false
   }
 })
 
-async function connect(next: OssConfig) {
-  const wasConnected = connected.value
+function updatedAccounts(account: OssAccount): OssAccount[] {
+  const copy = { ...account, config: { ...account.config } }
+  return accounts.value.some((item) => item.id === account.id)
+    ? accounts.value.map((item) => item.id === account.id ? copy : item)
+    : [...accounts.value, copy]
+}
+
+async function persist(nextAccounts: OssAccount[], nextId: string) {
+  if (!storageReady.value) throw new Error('账号存储尚未成功读取。请修复读取错误后重新启动，避免覆盖原有账号。')
+  const state: AccountState = { version: 1, accounts: nextAccounts, activeAccountId: nextId }
+  await saveAccounts(state)
+  accounts.value = nextAccounts
+  activeAccountId.value = nextId
+}
+
+async function saveAccount(account: OssAccount) {
+  if (accountBusy.value) return
+  connecting.value = true
+  configError.value = ''
+  try {
+    await persist(updatedAccounts(account), activeAccountId.value || account.id)
+    showToast('账号已保存；连接后使用新的配置')
+  } catch (error) {
+    configError.value = toMessage(error)
+  } finally {
+    connecting.value = false
+  }
+}
+
+async function removeAccount(id: string) {
+  if (accountBusy.value) return
+  connecting.value = true
+  configError.value = ''
+  try {
+    const remaining = accounts.value.filter((item) => item.id !== id)
+    await persist(remaining, activeAccountId.value === id ? remaining[0]?.id || '' : activeAccountId.value)
+    if (connectedAccount.value?.id === id) {
+      listRequest += 1
+      service.value.disconnect()
+      connected.value = false
+      connectedAccount.value = null
+      Object.assign(config, createInitialConfig())
+      entries.value = []
+      currentPrefix.value = ''
+      loading.value = false
+      closeImagePreview()
+    }
+    showToast('已移除本机账号')
+  } catch (error) {
+    configError.value = toMessage(error)
+  } finally {
+    connecting.value = false
+  }
+}
+
+async function selectAccount(event: Event) {
+  const select = event.target as HTMLSelectElement
+  const account = accounts.value.find((item) => item.id === select.value)
+  select.value = connectedAccount.value?.id || ''
+  if (!account || accountBusy.value) return
+  configAccountId.value = account.id
+  if (!canAutoConnect(account.config)) {
+    configError.value = '请补充此账号的凭证后连接。'
+    configOpen.value = true
+    return
+  }
+  await connect(account)
+}
+
+function accountOptionLabel(account: OssAccount): string {
+  const live = connectedAccount.value?.id === account.id ? connectedAccount.value : null
+  const pending = live && JSON.stringify(live) !== JSON.stringify(account)
+  const shown = live || account
+  return `${shown.name} · ${shown.config.bucket || '未填 Bucket'}${pending ? '（修改待重连）' : ''}`
+}
+
+async function connect(account: OssAccount) {
+  if (accountBusy.value) return
+  configAccountId.value = account.id
   connecting.value = true
   configError.value = ''
 
   try {
-    await service.connect(next)
-    Object.assign(config, next)
-    savePersistedConfig(next)
+    // Prepare the next connection independently; failed switches keep the current account intact.
+    const candidate = new OssBrowserService()
+    await candidate.connect(account.config)
+    await persist(updatedAccounts(account), account.id)
+    listRequest += 1
+    service.value = candidate
+    connectedAccount.value = { ...account, config: { ...account.config } }
+    Object.assign(config, account.config)
     connected.value = true
+    closeImagePreview()
     configOpen.value = false
     currentPrefix.value = ''
     continuationToken.value = ''
+    nextContinuationToken.value = ''
+    isTruncated.value = false
+    entries.value = []
     pageIndex.value = 1
     await loadDirectory()
-    showToast('OSS 已连接')
+    showToast(`已连接：${account.name}`)
   } catch (error) {
-    connected.value = wasConnected
     configError.value = toMessage(error)
+    configOpen.value = true
   } finally {
     connecting.value = false
   }
@@ -109,22 +211,25 @@ async function connect(next: OssConfig) {
 
 async function loadDirectory() {
   if (!connected.value) return
-
+  const request = ++listRequest
   loading.value = true
   listError.value = ''
   try {
-    const result = await service.list(currentPrefix.value, continuationToken.value)
+    const result = await service.value.list(currentPrefix.value, continuationToken.value)
+    if (request !== listRequest) return
     entries.value = result.entries
     nextContinuationToken.value = result.nextContinuationToken
     isTruncated.value = result.isTruncated
   } catch (error) {
+    if (request !== listRequest) return
     listError.value = toMessage(error)
   } finally {
-    loading.value = false
+    if (request === listRequest) loading.value = false
   }
 }
 
 async function enterFolder(prefix: string) {
+  if (uploadOpen.value || connecting.value) return
   currentPrefix.value = prefix
   continuationToken.value = ''
   pageIndex.value = 1
@@ -136,7 +241,7 @@ async function goBreadcrumb(prefix: string) {
 }
 
 async function nextPage() {
-  if (!nextContinuationToken.value) return
+  if (loading.value || connecting.value || uploadOpen.value || !nextContinuationToken.value) return
   continuationToken.value = nextContinuationToken.value
   pageIndex.value += 1
   await loadDirectory()
@@ -150,37 +255,24 @@ async function refresh() {
 }
 
 async function firstPage() {
+  if (loading.value || connecting.value || uploadOpen.value) return
   continuationToken.value = ''
   pageIndex.value = 1
   await loadDirectory()
 }
 
 function openUpload() {
-  uploadError.value = ''
-  uploadResult.value = null
-  uploadProgress.value = 0
+  if (!connected.value || connecting.value || uploadOpen.value) return
+  uploadPrefix.value = currentPrefix.value
   uploadOpen.value = true
 }
 
-async function upload(file: File, filename: string) {
-  uploading.value = true
-  uploadError.value = ''
-  uploadProgress.value = 0
-
-  try {
-    uploadResult.value = await service.upload(currentPrefix.value, file, filename, (percent) => {
-      uploadProgress.value = percent
-    })
-    await refresh()
-  } catch (error) {
-    uploadError.value = toMessage(error)
-  } finally {
-    uploading.value = false
-  }
+function closeUpload() {
+  if (!uploading.value) uploadOpen.value = false
 }
 
 function copyPublicUrl(entry: OssEntry) {
-  copyText(service.publicUrl(entry.key))
+  copyText(service.value.publicUrl(entry.key))
 }
 
 function openImagePreview(entry: OssEntry) {
@@ -190,7 +282,7 @@ function openImagePreview(entry: OssEntry) {
   previewError.value = ''
 
   try {
-    previewUrl.value = service.signedPreviewUrl(entry.key)
+    previewUrl.value = service.value.signedPreviewUrl(entry.key)
   } catch (error) {
     previewError.value = toMessage(error)
   }
@@ -213,7 +305,7 @@ async function download(entry: OssEntry) {
 
   downloadingKey.value = entry.key
   try {
-    const url = service.signedDownloadUrl(entry.key, entry.name)
+    const url = service.value.signedDownloadUrl(entry.key, entry.name)
     const savedTo = await downloadToUserDevice(url, entry.name)
     showToast(`已保存：${savedTo}`)
   } catch (error) {
@@ -287,6 +379,15 @@ function onTitlebarMouseDown(event: MouseEvent) {
     <main class="workspace">
       <aside class="sidebar">
         <div class="sidebar-brand"><img src="/app-icon.svg" alt="" /><div><strong>Nekox</strong><span>OSS 文件工作台</span></div></div>
+        <div class="account-switcher">
+          <label for="account-switch">当前账号</label>
+          <select id="account-switch" :value="connectedAccount?.id || ''" :disabled="accountBusy || !accounts.length" @change="selectAccount">
+            <option value="" disabled>{{ initializing ? '读取账号中…' : '选择账号并连接' }}</option>
+            <option v-for="account in accounts" :key="account.id" :value="account.id">{{ accountOptionLabel(account) }}</option>
+          </select>
+          <p v-if="connectedAccount?.notes" :title="connectedAccount.notes">{{ connectedAccount.notes }}</p>
+          <button class="secondary-button" type="button" :disabled="accountBusy" @click="configOpen = true">管理账号 · {{ accounts.length }}</button>
+        </div>
         <div class="sidebar-title">
           <span>目录导航</span>
           <small>按需加载</small>
@@ -342,15 +443,15 @@ function onTitlebarMouseDown(event: MouseEvent) {
               <i aria-hidden="true" />
               <span>{{ connected ? `${config.bucket} · ${config.region}` : '未连接' }}</span>
             </div>
-            <button class="toolbar-btn" type="button" title="连接配置" @click="configOpen = true">连接</button>
+            <button class="toolbar-btn" type="button" title="管理账号与连接配置" :disabled="accountBusy" @click="configOpen = true">账号</button>
             <span class="toolbar-divider" aria-hidden="true" />
             <span v-if="listSummary" class="toolbar-meta">{{ listSummary }}</span>
             <span v-if="listSummary" class="toolbar-divider" aria-hidden="true" />
-            <button class="toolbar-btn" type="button" :disabled="!connected || loading" @click="refresh">
+            <button class="toolbar-btn" type="button" :disabled="!connected || loading || connecting || uploadOpen" @click="refresh">
               {{ loading ? '刷新中…' : '刷新' }}
             </button>
             <span class="toolbar-divider" aria-hidden="true" />
-            <button class="toolbar-btn is-primary" type="button" :disabled="!connected" @click="openUpload">上传</button>
+            <button class="toolbar-btn is-primary" type="button" :disabled="!connected || connecting || uploadOpen" @click="openUpload">上传文件 / 文件夹</button>
           </div>
         </div>
 
@@ -365,7 +466,7 @@ function onTitlebarMouseDown(event: MouseEvent) {
           <span class="welcome-eyebrow">NEKOX OSS TOOL</span>
           <h2>让云端文件，触手可及</h2>
           <p>连接你的阿里云 OSS，轻松浏览、上传与分享文件。</p>
-          <button class="primary-button" type="button" @click="configOpen = true">打开连接配置</button>
+          <button class="primary-button" type="button" :disabled="accountBusy" @click="configOpen = true">{{ initializing ? '读取账号中…' : '添加或连接账号' }}</button>
         </div>
 
         <div v-else-if="listError" class="empty-state error-state">
@@ -428,8 +529,8 @@ function onTitlebarMouseDown(event: MouseEvent) {
           <div v-if="pageIndex > 1 || isTruncated" class="status-bar">
             <span>第 {{ pageIndex }} 页 · 每页最多 300 项</span>
             <div class="toolbar-group">
-              <button v-if="pageIndex > 1" class="toolbar-btn" type="button" @click="firstPage">第一页</button>
-              <button v-if="isTruncated && nextContinuationToken" class="toolbar-btn" type="button" @click="nextPage">下一页</button>
+              <button v-if="pageIndex > 1" class="toolbar-btn" type="button" :disabled="loading || connecting || uploadOpen" @click="firstPage">第一页</button>
+              <button v-if="isTruncated && nextContinuationToken" class="toolbar-btn" type="button" :disabled="loading || connecting || uploadOpen" @click="nextPage">下一页</button>
             </div>
           </div>
         </div>
@@ -438,11 +539,15 @@ function onTitlebarMouseDown(event: MouseEvent) {
 
     <ConfigModal
       :open="configOpen"
-      :initial="config"
-      :connecting="connecting"
+      :accounts="accounts"
+      :initial-selected-account-id="configAccountId || activeAccountId"
+      :active-account-id="connectedAccount?.id || ''"
+      :connecting="connecting || initializing"
       :error="configError"
       @close="configOpen = false"
       @connect="connect"
+      @save="saveAccount"
+      @remove="removeAccount"
     />
 
     <ImagePreviewModal
@@ -455,13 +560,12 @@ function onTitlebarMouseDown(event: MouseEvent) {
 
     <UploadModal
       :open="uploadOpen"
-      :prefix="currentPrefix"
-      :uploading="uploading"
-      :progress="uploadProgress"
-      :result="uploadResult"
-      :error="uploadError"
-      @close="uploadOpen = false"
-      @upload="upload"
+      :prefix="uploadPrefix"
+      :service="service"
+      :account-label="accountLabel"
+      @close="closeUpload"
+      @busy="uploading = $event"
+      @completed="refresh"
       @copy="copyText"
     />
 

@@ -32,6 +32,10 @@ jobs:
           if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$version") { throw 'Tag does not match application version' }
       - name: Type check
         run: npm run typecheck
+      - name: Test mocked account and upload flows
+        run: npm test
+      - name: Test native account vault
+        run: cargo test --manifest-path src-tauri/Cargo.toml --locked
       - name: Build Windows installer
         run: npm run build:desktop -- -- --locked
       - name: Prepare assets

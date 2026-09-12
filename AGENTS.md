@@ -22,7 +22,7 @@
 
 ## 安全约束
 
-- 不允许把 AccessKey Secret、STS Token 写进源码、`.env`、localStorage、IndexedDB、日志或错误上报。
+- 不允许把 AccessKey Secret、STS Token 写进源码、`.env`、localStorage、IndexedDB、日志或错误上报。Windows 桌面端仅通过当前用户 DPAPI 加密账号库保存；Web 预览仅在会话内保留凭证。
 - UI 中 Secret 使用 password 输入框。
 - 长期 AccessKey 直连仅视为本地/内网兼容模式；正式公网方案优先 STS。
 - 不主动扩大 RAM 权限。
@@ -41,8 +41,9 @@
 - 目录只是 Object Key Prefix，不假设存在真实文件夹。
 - 浏览目录使用 `delimiter=/`。
 - 上传文件默认进入当前 Prefix。
-- 用户输入的上传文件名不允许包含 `/`，避免越过当前 Prefix；若未来支持目标路径，应单独设计。
-- 同名对象不覆盖，自动按 `name (n).ext` 递增。
+- 用户手动输入的上传文件名不允许包含路径分隔符；文件夹上传仅接收选择器提供且校验过的相对路径，保留根文件夹与子目录，不允许绝对路径或 `..`。
+- 同名对象由用户在弹窗中选择覆盖、跳过或按 `name (n).ext` 自动改名；默认不覆盖。允许将选择应用到本轮后续冲突。
+- 上传弹窗打开期间固定账号和 Prefix，禁止切换账号或目录。成功项显示最终 Key 和 URL，失败项可重试。
 - 公共 URL 优先使用 `publicBaseUrl`，否则按 `https://{bucket}.{region}.aliyuncs.com/{key}` 生成。
 
 ## UI 约束

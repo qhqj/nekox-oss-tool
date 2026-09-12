@@ -1,7 +1,9 @@
 import OSS from 'ali-oss'
 import type { OssConfig, OssEntry, OssListResult, UploadResult } from '../types/oss'
-import { basename, encodeObjectKey, joinPrefix, splitFileName } from '../utils/file'
+import { basename, encodeObjectKey, joinPrefix, splitFileName, validateUploadFileName, validateUploadRelativePath } from '../utils/file'
 import { applyParsedOssHost, formatOssConnectError } from '../utils/oss-config'
+import { UploadStoppedError, uploadErrorMessage } from '../utils/upload'
+import type { UploadOptions, UploadOutcome } from '../utils/upload'
 
 type ProgressHandler = (percent: number) => void
 
@@ -25,9 +27,9 @@ export class OssBrowserService {
     if (normalized.stsToken) options.stsToken = normalized.stsToken
     if (normalized.endpoint) options.endpoint = normalized.endpoint
 
-    const client = new OSS(options as any)
-
+    let client: OSS
     try {
+      client = new OSS(options as any)
       // 用一次极小的对象列表请求验证凭证、Bucket、Region 与 CORS。
       await client.listV2({ 'max-keys': 1 })
     } catch (error) {
@@ -54,11 +56,16 @@ export class OssBrowserService {
     if (prefix) query.prefix = prefix
     if (continuationToken) query['continuation-token'] = continuationToken
 
-    const raw = (await client.listV2(query)) as unknown as {
+    let raw: {
       prefixes?: string[]
       objects?: Array<{ name: string; size?: number | string }>
       isTruncated?: boolean
       nextContinuationToken?: string
+    }
+    try {
+      raw = (await client.listV2(query)) as unknown as typeof raw
+    } catch (error) {
+      throw new Error(formatOssConnectError(error))
     }
 
     const folders: OssEntry[] = (raw.prefixes ?? []).map((folderKey) => ({
@@ -90,32 +97,72 @@ export class OssBrowserService {
     requestedName: string,
     onProgress?: ProgressHandler,
   ): Promise<UploadResult> {
+    const outcome = await this.uploadFile(prefix, file, validateUploadFileName(requestedName), {
+      onProgress,
+      resolveConflict: async () => 'rename',
+    })
+    if (outcome.status !== 'success') throw new UploadStoppedError()
+    return outcome.result
+  }
+
+  async uploadFile(prefix: string, file: File, relativePath: string, options: UploadOptions = {}): Promise<UploadOutcome> {
     const client = this.requireClient()
-    const safeName = this.validateFileName(requestedName)
-    const requestedKey = joinPrefix(prefix, safeName)
-    const finalKey = await this.resolveConflictName(requestedKey)
+    const requestedKey = joinPrefix(prefix, validateUploadRelativePath(relativePath))
+    let finalKey = requestedKey
+    let renameSelected = false
+    let knownConflict = false
 
-    onProgress?.(1)
-
-    if (file.size >= 8 * 1024 * 1024) {
-      await client.multipartUpload(finalKey, file, {
-        parallel: 4,
-        partSize: 1024 * 1024,
-        progress: async (value: number) => {
-          onProgress?.(Math.max(1, Math.min(99, Math.round(value * 100))))
-        },
-      })
-    } else {
-      await client.put(finalKey, file)
+    // Bound repeated races against another uploader. Access errors never imply absence.
+    for (let attempt = 0; attempt < 100; attempt += 1) {
+      let overwrite = false
+      if (knownConflict || await this.objectExists(finalKey)) {
+        if (renameSelected) {
+          finalKey = await this.resolveConflictName(requestedKey)
+        } else {
+          const action = options.resolveConflict ? await options.resolveConflict(finalKey) : 'rename'
+          if (action === null) throw new UploadStoppedError()
+          if (action === 'skip') return { status: 'skipped', key: finalKey }
+          if (action === 'overwrite') overwrite = true
+          else {
+            renameSelected = true
+            finalKey = await this.resolveConflictName(requestedKey)
+          }
+        }
+      }
+      knownConflict = false
+      options.onProgress?.(1)
+      try {
+        // OSS ignores this header for buckets with versioning enabled or suspended.
+        // Keep the list check too; do not request additional bucket permissions.
+        const headers = overwrite ? {} : { 'x-oss-forbid-overwrite': 'true' }
+        if (file.size >= 8 * 1024 * 1024) {
+          await client.multipartUpload(finalKey, file, {
+            headers,
+            parallel: 4,
+            partSize: 1024 * 1024,
+            progress: async (value: number) => {
+              options.onProgress?.(Math.max(1, Math.min(99, Math.round(value * 100))))
+            },
+          })
+        } else {
+          await client.put(finalKey, file, { headers })
+        }
+      } catch (error) {
+        const code = typeof error === 'object' && error !== null && 'code' in error ? error.code : ''
+        if (!overwrite && code === 'FileAlreadyExists') {
+          knownConflict = true
+          continue
+        }
+        throw new Error(uploadErrorMessage(error))
+      }
+      options.onProgress?.(100)
+      return { status: 'success', result: {
+        key: finalKey,
+        publicUrl: this.publicUrl(finalKey),
+        renamed: finalKey !== requestedKey,
+      } }
     }
-
-    onProgress?.(100)
-
-    return {
-      key: finalKey,
-      publicUrl: this.publicUrl(finalKey),
-      renamed: finalKey !== requestedKey,
-    }
+    throw new Error('目标目录持续出现同名冲突，请稍后重试。')
   }
 
   publicUrl(key: string): string {
@@ -171,10 +218,26 @@ export class OssBrowserService {
 
   private async objectExists(key: string): Promise<boolean> {
     const client = this.requireClient()
-    const raw = (await client.listV2({ prefix: key, 'max-keys': 1 })) as unknown as {
-      objects?: Array<{ name: string }>
+    const seenTokens = new Set<string>()
+    let token = ''
+    while (true) {
+      const query: Record<string, string | number> = { prefix: key, 'max-keys': 1000 }
+      if (token) query['continuation-token'] = token
+      let raw: { objects?: Array<{ name: string }>; isTruncated?: boolean; nextContinuationToken?: string }
+      try {
+        raw = (await client.listV2(query)) as unknown as typeof raw
+      } catch (error) {
+        throw new Error(uploadErrorMessage(error))
+      }
+      if ((raw.objects ?? []).some((object) => object.name === key)) return true
+      if (!raw.isTruncated) return false
+      const nextToken = raw.nextContinuationToken
+      if (!nextToken || seenTokens.has(nextToken)) {
+        throw new Error('OSS 同名检查分页异常，已停止上传以避免误覆盖。')
+      }
+      seenTokens.add(nextToken)
+      token = nextToken
     }
-    return (raw.objects ?? []).some((object) => object.name === key)
   }
 
   private normalizeConfig(config: OssConfig): OssConfig {
@@ -198,13 +261,6 @@ export class OssBrowserService {
     if (!normalized.accessKeyId) throw new Error('请填写 AccessKey ID。')
     if (!normalized.accessKeySecret) throw new Error('请填写 AccessKey Secret。')
 
-    return normalized
-  }
-
-  private validateFileName(name: string): string {
-    const normalized = name.trim()
-    if (!normalized) throw new Error('上传文件名不能为空。')
-    if (normalized.includes('/')) throw new Error('文件名不能包含 /，请先进入目标目录再上传。')
     return normalized
   }
 

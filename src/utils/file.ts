@@ -26,6 +26,27 @@ export function splitFileName(name: string): { stem: string; extension: string }
   return { stem: name.slice(0, dot), extension: name.slice(dot) }
 }
 
+export function validateUploadFileName(name: string): string {
+  const normalized = name.trim()
+  if (!normalized) throw new Error('上传文件名不能为空。')
+  if (/[\\/]/.test(normalized)) throw new Error('文件名不能包含 / 或 \\，请先进入目标目录再上传。')
+  if (normalized === '.' || normalized === '..' || /[\u0000-\u001f\u007f]/.test(normalized)) {
+    throw new Error('文件名包含不支持的字符。')
+  }
+  return normalized
+}
+
+/** Folder paths come only from the file picker; never normalize traversal away. */
+export function validateUploadRelativePath(path: string): string {
+  if (!path || path.startsWith('/') || /^[a-z]:/i.test(path) || /[\\\u0000-\u001f\u007f]/.test(path)) {
+    throw new Error('上传相对路径无效，请重新选择文件或文件夹。')
+  }
+  if (path.split('/').some((segment) => !segment.trim() || segment === '.' || segment === '..')) {
+    throw new Error('上传路径不能包含空目录、. 或 ..。')
+  }
+  return path
+}
+
 const IMAGE_EXTENSIONS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp', '.svg', '.avif', '.ico'])
 
 export function isImageFile(name: string): boolean {
