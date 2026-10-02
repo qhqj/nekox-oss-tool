@@ -47,6 +47,22 @@ beforeEach(() => {
 })
 
 describe('account and upload isolation', () => {
+  it('accepts same-account upload credential replacement in memory without saving or reconnecting', async () => {
+    const wrapper = start(); await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === '上传文件 / 文件夹')!.trigger('click')
+    const saveCount = mocks.save.mock.calls.length, connectCount = mocks.connect.mock.calls.length
+    wrapper.findComponent({ name: 'UploadModal' }).vm.$emit('credentials', {
+      accessKeyId: 'new-id', accessKeySecret: 'synthetic-new-secret', stsToken: 'synthetic-new-token',
+    })
+    await flushPromises()
+    expect(mocks.save).toHaveBeenCalledTimes(saveCount)
+    expect(mocks.connect).toHaveBeenCalledTimes(connectCount)
+    wrapper.findComponent({ name: 'UploadModal' }).vm.$emit('close'); await flushPromises()
+    const updated = wrapper.findComponent({ name: 'ConfigModal' }).props('accounts')[0]
+    expect(updated.config).toMatchObject({ bucket: 'bucket-a', accessKeyId: 'new-id', accessKeySecret: 'synthetic-new-secret' })
+    expect(wrapper.text()).not.toContain('synthetic-new-secret')
+    wrapper.unmount()
+  })
   it('hands browser downloads off without claiming they were saved', async () => {
     const wrapper = start(); await flushPromises()
     await wrapper.findAll('button').find((button) => button.text() === '下载')!.trigger('click')

@@ -3,13 +3,15 @@ import { OssBrowserService } from '../src/services/oss'
 import { UploadStoppedError } from '../src/utils/upload'
 import { validateUploadFileName, validateUploadRelativePath } from '../src/utils/file'
 
-const sdk = vi.hoisted(() => ({ construct: vi.fn(), listV2: vi.fn(), put: vi.fn(), multipartUpload: vi.fn(), signatureUrl: vi.fn() }))
+const sdk = vi.hoisted(() => ({ construct: vi.fn(), cancel: vi.fn(), listV2: vi.fn(), put: vi.fn(), multipartUpload: vi.fn(), signatureUrl: vi.fn() }))
 vi.mock('ali-oss', () => ({ default: class {
   constructor() { sdk.construct() }
   listV2 = sdk.listV2
   put = sdk.put
   multipartUpload = sdk.multipartUpload
   signatureUrl = sdk.signatureUrl
+  cancel = sdk.cancel
+  request = async () => ({})
 } }))
 
 let service: OssBrowserService

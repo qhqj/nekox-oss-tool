@@ -7,6 +7,7 @@ import WindowControls from './components/WindowControls.vue'
 import { OssBrowserService } from './services/oss'
 import type { OssConfig, OssEntry } from './types/oss'
 import type { AccountState, OssAccount } from './types/accounts'
+import type { UploadCredentials } from './utils/upload'
 import { downloadToUserDevice } from './utils/download'
 import { canAutoConnect, createInitialConfig, loadAccounts, saveAccounts } from './utils/config-storage'
 import { formatBytes, isImageFile } from './utils/file'
@@ -187,7 +188,7 @@ async function connect(account: OssAccount) {
   try {
     // Prepare the next connection independently; failed switches keep the current account intact.
     const candidate = new OssBrowserService()
-    await candidate.connect(account.config)
+    await candidate.connect(account.config, account.id)
     await persist(updatedAccounts(account), account.id)
     listRequest += 1
     service.value = candidate
@@ -272,6 +273,15 @@ function openUpload() {
 
 function closeUpload() {
   if (!uploading.value) uploadOpen.value = false
+}
+
+function updateUploadCredentials(credentials: UploadCredentials) {
+  if (!uploadOpen.value || uploading.value || !connectedAccount.value) return
+  Object.assign(connectedAccount.value.config, credentials)
+  const account = accounts.value.find((item) => item.id === connectedAccount.value!.id)
+  if (account) Object.assign(account.config, credentials)
+  Object.assign(config, credentials)
+  // Session memory only: do not save, reconnect, or contact a refresh endpoint.
 }
 
 function copyPublicUrl(entry: OssEntry) {
@@ -580,6 +590,7 @@ function onTitlebarMouseDown(event: MouseEvent) {
       :account-label="accountLabel"
       @close="closeUpload"
       @busy="uploading = $event"
+      @credentials="updateUploadCredentials"
       @completed="refresh"
       @copy="copyText"
     />

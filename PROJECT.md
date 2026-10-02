@@ -4,7 +4,7 @@
 - Version: `0.2.0`, Windows desktop app plus web development preview
 - Stack: Vue 3 / Vite / TypeScript / ali-oss Browser SDK / Tauri 2
 - Core: named accounts with notes -> lazy directory list -> recursive batch uploads -> public URL -> explicit download
-- Conflict dialog: overwrite / skip / rename, apply to remaining conflicts, retry failures, pause after current
+- Conflict dialog: overwrite / skip / rename, apply to remaining conflicts, retry failures, abort current transfer
 - Upload account and Prefix remain fixed while the dialog is open
 - No backend
 - No automatic object preview/download
@@ -19,4 +19,7 @@
 - Windows downloads select a new target before signing/GET, stream with 128 KiB binary IPC and backpressure, and expose progress/cancel independently of directory navigation
 - Native download paths originate in the save dialog only; exclusive temp handles, stable directory names, non-replacing rename, task/window ownership and narrow cleanup protect local files
 - Browser downloads hand HTTPS signed attachment URLs to the browser; no full-file memory buffer, no new network dependencies or generic filesystem write scope
-- Upload cancellation/checkpoint recovery is a separate future milestone; M2 changes downloading only
+- Uploads use isolated abortable transports; checkpoint snapshots stay in dialog-session memory and bind to account/Bucket/target/File identity
+- Credential failure pauses the queue; manual same-account credential replacement keeps tasks without persistence, STS refresh calls or immediate network verification
+- Checkpoint timeout recovery is limited to one automatic attempt within the five-write budget; no remote multipart DELETE or additional RAM permissions
+- Cancelled server-accepted writes cannot be rolled back; remote incomplete parts may remain and incur costs; real OSS/WebView cancellation is unverified
