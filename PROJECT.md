@@ -16,3 +16,7 @@
 - PUT and multipart initiate/complete retain the no-overwrite header unless explicitly approved; server conflict writes are bounded to five attempts
 - Local tests use mocked OSS and synthetic credentials; real Bucket acceptance is separate
 - Public production usage should migrate to STS
+- Windows downloads select a new target before signing/GET, stream with 128 KiB binary IPC and backpressure, and expose progress/cancel independently of directory navigation
+- Native download paths originate in the save dialog only; exclusive temp handles, stable directory names, non-replacing rename, task/window ownership and narrow cleanup protect local files
+- Browser downloads hand HTTPS signed attachment URLs to the browser; no full-file memory buffer, no new network dependencies or generic filesystem write scope
+- Upload cancellation/checkpoint recovery is a separate future milestone; M2 changes downloading only

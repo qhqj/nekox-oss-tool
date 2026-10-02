@@ -38,9 +38,9 @@ describe('installed SDK overwrite header propagation', () => {
     expect(requests[1].subres).toEqual({ uploadId: 'synthetic-upload' })
     for (const request of requests) expect(request.headers['x-oss-forbid-overwrite']).toBe('true')
   })
-  it('grants the save command without adding blanket filesystem scopes', () => {
+  it('does not grant generic filesystem writes for the native download sink', () => {
     const capability = JSON.parse(readFileSync(new URL('../src-tauri/capabilities/default.json', import.meta.url), 'utf8'))
-    expect(capability.permissions).toContain('fs:allow-write-file')
+    expect(capability.permissions).not.toContain('fs:allow-write-file')
     expect(capability.permissions).toContain('dialog:default')
     expect(capability.permissions.some((permission: unknown) => typeof permission !== 'string')).toBe(false)
     expect(capability.permissions).not.toContain('fs:write-all')

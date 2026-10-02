@@ -4,7 +4,9 @@ import App from '../src/App.vue'
 
 const mocks = vi.hoisted(() => ({
   load: vi.fn(), save: vi.fn(), connect: vi.fn(), list: vi.fn(), disconnect: vi.fn(),
+  download: vi.fn(), signDownload: vi.fn(), desktop: false,
 }))
+vi.mock('../src/utils/download', () => ({ downloadToUserDevice: mocks.download }))
 vi.mock('../src/utils/config-storage', () => ({
   createInitialConfig: () => ({ region: 'oss-cn-beijing', bucket: '', accessKeyId: '', accessKeySecret: '', stsToken: '', endpoint: '', publicBaseUrl: '' }),
   canAutoConnect: (config: { accessKeySecret: string }) => Boolean(config.accessKeySecret),
@@ -16,10 +18,11 @@ vi.mock('../src/services/oss', () => ({
     connect = mocks.connect
     list = mocks.list
     disconnect = mocks.disconnect
+    signedDownloadUrl = mocks.signDownload
   },
 }))
 vi.mock('../src/utils/windowControls', () => ({
-  isDesktopShell: () => false, startWindowDrag: vi.fn(), toggleMaximizeWindow: vi.fn(),
+  isDesktopShell: () => mocks.desktop, startWindowDrag: vi.fn(), toggleMaximizeWindow: vi.fn(),
 }))
 const account = (id: string) => ({
   id, name: `账号 ${id}`, notes: `备注 ${id}`,
@@ -38,9 +41,66 @@ beforeEach(() => {
   mocks.save.mockResolvedValue(undefined)
   mocks.connect.mockResolvedValue(undefined)
   mocks.list.mockResolvedValue(result('first.txt'))
+  mocks.desktop = false
+  mocks.download.mockResolvedValue({ status: 'started' })
+  mocks.signDownload.mockReturnValue('https://synthetic.example.test/file')
 })
 
 describe('account and upload isolation', () => {
+  it('hands browser downloads off without claiming they were saved', async () => {
+    const wrapper = start(); await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === '下载')!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain('已交给浏览器下载')
+    expect(wrapper.text()).not.toContain('已保存：')
+    const factory = mocks.download.mock.calls[0][0]
+    factory('safe.txt')
+    expect(mocks.signDownload).toHaveBeenCalledWith('first.txt', 'safe.txt')
+    wrapper.unmount()
+  })
+
+  it('keeps the current account fixed and allows cancellation during a desktop download', async () => {
+    mocks.desktop = true
+    let finish!: (value: { status: 'cancelled' }) => void
+    mocks.download.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+    const wrapper = start(); await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === '下载')!.trigger('click')
+    const options = mocks.download.mock.calls[0][2]
+    expect(wrapper.get('#account-switch').attributes('disabled')).toBeDefined()
+    wrapper.findComponent({ name: 'ConfigModal' }).vm.$emit('connect', account('b'))
+    await flushPromises(); expect(mocks.connect).toHaveBeenCalledTimes(1)
+    options.onProgress(1024); await flushPromises()
+    expect(wrapper.text()).toContain('已接收 1.0 KB')
+    await wrapper.get('.tree-root').trigger('click'); await flushPromises()
+    expect(wrapper.findAll('button').find((button) => button.text() === '取消下载')).toBeDefined()
+    await wrapper.findAll('button').find((button) => button.text() === '取消下载')!.trigger('click')
+    expect(options.signal.aborted).toBe(true)
+    finish({ status: 'cancelled' }); await flushPromises()
+    expect(wrapper.text()).toContain('已取消下载')
+    expect(wrapper.get('#account-switch').attributes('disabled')).toBeUndefined()
+    wrapper.unmount()
+  })
+
+  it('reports a saved desktop file only after the download helper completes', async () => {
+    mocks.desktop = true
+    mocks.download.mockResolvedValueOnce({ status: 'saved', path: 'C:\\synthetic\\saved.txt' })
+    const wrapper = start(); await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === '下载')!.trigger('click')
+    await flushPromises(); expect(wrapper.text()).toContain('已保存：C:\\synthetic\\saved.txt')
+    expect(wrapper.findAll('button').some((button) => button.text() === '取消下载')).toBe(false)
+    wrapper.unmount()
+  })
+
+  it('aborts an active download when the view unmounts', async () => {
+    let finish!: (value: { status: 'cancelled' }) => void
+    mocks.download.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+    const wrapper = start(); await flushPromises()
+    await wrapper.findAll('button').find((button) => button.text() === '下载')!.trigger('click')
+    const signal = mocks.download.mock.calls[0][2].signal
+    wrapper.unmount(); expect(signal.aborted).toBe(true)
+    finish({ status: 'cancelled' }); await flushPromises()
+  })
+
   it('labels saved edits while continuing to identify the actual connected bucket', async () => {
     const wrapper = start()
     await flushPromises()

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive, ref, shallowRef } from 'vue'
+import { computed, onBeforeUnmount, onMounted, reactive, ref, shallowRef } from 'vue'
 import ConfigModal from './components/ConfigModal.vue'
 import ImagePreviewModal from './components/ImagePreviewModal.vue'
 import UploadModal from './components/UploadModal.vue'
@@ -45,6 +45,9 @@ const uploading = ref(false)
 const uploadPrefix = ref('')
 const toast = ref('')
 const downloadingKey = ref('')
+const downloadBytes = ref(0)
+let downloadController: AbortController | null = null
+onBeforeUnmount(() => downloadController?.abort())
 const previewOpen = ref(false)
 const previewName = ref('')
 const previewUrl = ref('')
@@ -304,15 +307,22 @@ async function download(entry: OssEntry) {
   if (downloadingKey.value) return
 
   downloadingKey.value = entry.key
+  downloadBytes.value = 0
+  downloadController = new AbortController()
+  const downloadService = service.value
   try {
-    const url = service.value.signedDownloadUrl(entry.key, entry.name)
-    const savedTo = await downloadToUserDevice(url, entry.name)
-    showToast(`已保存：${savedTo}`)
+    const result = await downloadToUserDevice((filename) => downloadService.signedDownloadUrl(entry.key, filename), entry.name, {
+      signal: downloadController.signal,
+      onProgress: (bytes) => { downloadBytes.value = bytes },
+    })
+    if (result.status === 'saved') showToast(`已保存：${result.path}`)
+    else if (result.status === 'started') showToast('已交给浏览器下载，请查看浏览器下载列表')
+    else showToast('已取消下载')
   } catch (error) {
-    const message = toMessage(error)
-    if (message !== '已取消保存') showToast(message)
+    showToast(toMessage(error))
   } finally {
     downloadingKey.value = ''
+    downloadController = null
   }
 }
 
@@ -419,7 +429,7 @@ function onTitlebarMouseDown(event: MouseEvent) {
 
         <div class="sidebar-note">
           <strong>操作说明</strong>
-          <span>图片点击文件名可预览；下载会弹出保存位置（桌面端）或保存到浏览器默认下载目录。</span>
+          <span>图片点击文件名可预览；桌面下载先选择新文件位置，浏览器下载由浏览器管理。</span>
         </div>
       </aside>
 
@@ -459,6 +469,11 @@ function onTitlebarMouseDown(event: MouseEvent) {
           <span>名称</span>
           <span>大小</span>
           <span class="list-head-actions">操作</span>
+        </div>
+
+        <div v-if="isDesktop && downloadingKey" class="status-bar" role="status">
+          <span>下载：{{ downloadingKey }} · 已接收 {{ formatBytes(downloadBytes) }}</span>
+          <button class="toolbar-btn" type="button" @click="downloadController?.abort()">取消下载</button>
         </div>
 
         <div v-if="!connected" class="empty-state">
@@ -516,7 +531,7 @@ function onTitlebarMouseDown(event: MouseEvent) {
                   <button
                     type="button"
                     title="下载文件"
-                    :disabled="downloadingKey === entry.key"
+                    :disabled="Boolean(downloadingKey)"
                     @click="download(entry)"
                   >
                     {{ downloadingKey === entry.key ? '下载中…' : '下载' }}
