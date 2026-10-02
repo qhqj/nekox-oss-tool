@@ -1,7 +1,7 @@
 import OSS from 'ali-oss'
 import type { OssConfig, OssEntry, OssListResult, UploadResult } from '../types/oss'
 import { basename, encodeObjectKey, joinPrefix, splitFileName, validateUploadFileName, validateUploadRelativePath } from '../utils/file'
-import { applyParsedOssHost, formatOssConnectError } from '../utils/oss-config'
+import { applyParsedOssHost, formatOssConnectError, normalizeHttpsUrl } from '../utils/oss-config'
 import { UploadStoppedError, uploadErrorMessage } from '../utils/upload'
 import type { UploadOptions, UploadOutcome } from '../utils/upload'
 
@@ -111,13 +111,15 @@ export class OssBrowserService {
     let finalKey = requestedKey
     let renameSelected = false
     let knownConflict = false
+    const rejectedKeys = new Set<string>()
 
     // Bound repeated races against another uploader. Access errors never imply absence.
-    for (let attempt = 0; attempt < 100; attempt += 1) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
       let overwrite = false
       if (knownConflict || await this.objectExists(finalKey)) {
+        rejectedKeys.add(finalKey)
         if (renameSelected) {
-          finalKey = await this.resolveConflictName(requestedKey)
+          finalKey = await this.resolveConflictName(requestedKey, rejectedKeys)
         } else {
           const action = options.resolveConflict ? await options.resolveConflict(finalKey) : 'rename'
           if (action === null) throw new UploadStoppedError()
@@ -125,7 +127,7 @@ export class OssBrowserService {
           if (action === 'overwrite') overwrite = true
           else {
             renameSelected = true
-            finalKey = await this.resolveConflictName(requestedKey)
+            finalKey = await this.resolveConflictName(requestedKey, rejectedKeys)
           }
         }
       }
@@ -200,9 +202,7 @@ export class OssBrowserService {
     return client.signatureUrl(key, params)
   }
 
-  private async resolveConflictName(key: string): Promise<string> {
-    if (!(await this.objectExists(key))) return key
-
+  private async resolveConflictName(key: string, rejectedKeys: Set<string>): Promise<string> {
     const slashIndex = key.lastIndexOf('/')
     const prefix = slashIndex >= 0 ? key.slice(0, slashIndex + 1) : ''
     const fileName = slashIndex >= 0 ? key.slice(slashIndex + 1) : key
@@ -210,6 +210,8 @@ export class OssBrowserService {
 
     for (let index = 1; index <= 9999; index += 1) {
       const candidate = `${prefix}${stem} (${index})${extension}`
+      // Do not choose a server-rejected key again if listing has not caught up.
+      if (rejectedKeys.has(candidate)) continue
       if (!(await this.objectExists(candidate))) return candidate
     }
 
@@ -248,8 +250,8 @@ export class OssBrowserService {
       accessKeyId: config.accessKeyId.trim(),
       accessKeySecret: config.accessKeySecret.trim(),
       stsToken: config.stsToken.trim(),
-      endpoint: config.endpoint.trim(),
-      publicBaseUrl: config.publicBaseUrl.trim(),
+      endpoint: normalizeHttpsUrl(config.endpoint, 'OSS Endpoint'),
+      publicBaseUrl: normalizeHttpsUrl(config.publicBaseUrl, '公共访问基础地址', true),
     }
 
     applyParsedOssHost(normalized, normalized.bucket)

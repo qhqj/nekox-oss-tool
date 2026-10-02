@@ -22,7 +22,7 @@
 
 ## 安全约束
 
-- 不允许把 AccessKey Secret、STS Token 写进源码、`.env`、localStorage、IndexedDB、日志或错误上报。Windows 桌面端仅通过当前用户 DPAPI 加密账号库保存；Web 预览仅在会话内保留凭证。
+- 不允许把 AccessKey Secret、STS Token 写进源码、`.env`、localStorage、IndexedDB、日志或错误上报。Windows 与 Web 均仅在会话内保留凭证；Windows DPAPI 账号库仅保存非敏感账号资料。
 - UI 中 Secret 使用 password 输入框。
 - 长期 AccessKey 直连仅视为本地/内网兼容模式；正式公网方案优先 STS。
 - 不主动扩大 RAM 权限。

@@ -9,7 +9,10 @@
 - No backend
 - No automatic object preview/download
 - No OSS object deletion; removing an account affects local configuration only
-- Windows credentials use a per-user DPAPI encrypted vault; web credentials are session-only
+- Credentials are session-only on both Windows and web; Windows encrypts nonsecret account metadata with per-user DPAPI
+- Old vault credentials are not restored; a successful save strips them, without rewriting on load alone
 - Legacy single-account settings migrate before old plaintext storage is removed
+- HTTPS endpoint/public URL validation happens before SDK construction; no URL credentials/query/fragment
+- PUT and multipart initiate/complete retain the no-overwrite header unless explicitly approved; server conflict writes are bounded to five attempts
 - Local tests use mocked OSS and synthetic credentials; real Bucket acceptance is separate
 - Public production usage should migrate to STS

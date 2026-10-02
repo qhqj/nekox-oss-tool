@@ -4,16 +4,44 @@ export interface ParsedOssHost {
 }
 
 const VIRTUAL_HOSTED_PATTERN =
-  /(?:https?:\/\/)?(?<bucket>[a-z0-9][a-z0-9-]{0,61}[a-z0-9])\.(?<region>oss-[a-z0-9-]+)\.aliyuncs\.com(?:[/?#]|$)/i
+  /^(?<bucket>[a-z0-9][a-z0-9-]{0,61}[a-z0-9])\.(?<region>oss-[a-z0-9-]+)\.aliyuncs\.com$/i
 
 const PATH_STYLE_PATTERN =
-  /(?:https?:\/\/)?(?<region>oss-[a-z0-9-]+)\.aliyuncs\.com\/(?<bucket>[a-z0-9][a-z0-9-]{0,61}[a-z0-9])(?:[/?#]|$)/i
+  /^\/(?<bucket>[a-z0-9][a-z0-9-]{0,61}[a-z0-9])(?:\/|$)/i
+
+function httpsAddress(input: string): URL {
+  const value = input.trim()
+  if (!value || /^[\/]/.test(value) || /[\u0000-\u0020\u007f\\]/.test(value)) throw new Error()
+  const url = new URL(/^[a-z][a-z\d+.-]*:\/\//i.test(value) ? value : `https://${value}`)
+  if (url.protocol !== 'https:' || !url.hostname || url.username || url.password) throw new Error()
+  return url
+}
+
+/** Validate before SDK construction; secure:true does not override an explicit HTTP endpoint. */
+export function normalizeHttpsUrl(input: string, label: string, allowPath = false): string {
+  if (!input.trim()) return ''
+  try {
+    const url = httpsAddress(input)
+    if (/[?#]/.test(input) || (!allowPath && url.pathname !== '/')) throw new Error()
+    return url.href.replace(/\/+$/, '')
+  } catch {
+    throw new Error(`${label} 必须为 HTTPS 地址，不能包含用户名、密码、查询参数或片段${allowPath ? '。' : '，且不能包含路径。'}`)
+  }
+}
 
 export function parseOssHostInput(input: string): ParsedOssHost | null {
   const trimmed = input.trim()
   if (!trimmed) return null
 
-  const virtualHosted = trimmed.match(VIRTUAL_HOSTED_PATTERN)
+  let url: URL
+  try {
+    url = httpsAddress(trimmed)
+    if (url.port) return null
+  } catch {
+    return null
+  }
+
+  const virtualHosted = url.hostname.match(VIRTUAL_HOSTED_PATTERN)
   if (virtualHosted?.groups?.bucket && virtualHosted.groups.region) {
     return {
       bucket: virtualHosted.groups.bucket,
@@ -21,11 +49,12 @@ export function parseOssHostInput(input: string): ParsedOssHost | null {
     }
   }
 
-  const pathStyle = trimmed.match(PATH_STYLE_PATTERN)
-  if (pathStyle?.groups?.bucket && pathStyle.groups.region) {
+  const region = url.hostname.match(/^(oss-[a-z0-9-]+)\.aliyuncs\.com$/i)?.[1]
+  const pathStyle = region && url.pathname.match(PATH_STYLE_PATTERN)
+  if (pathStyle && pathStyle.groups?.bucket && region) {
     return {
       bucket: pathStyle.groups.bucket,
-      region: pathStyle.groups.region,
+      region,
     }
   }
 

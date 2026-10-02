@@ -78,8 +78,16 @@ function readLegacy(raw: string): OssConfig {
 
 function addLegacy(state: AccountState, config: OssConfig): AccountState {
   const same = state.accounts.find((account) =>
-    CONFIG_FIELDS.every((field) => account.config[field] === config[field]))
-  if (same) return state
+    CONFIG_FIELDS.filter((field) => field !== 'accessKeySecret' && field !== 'stsToken')
+      .every((field) => account.config[field] === config[field]))
+  if (same) {
+    // A failed legacy cleanup must not duplicate profiles after credentials leave the vault.
+    if (!same.config.accessKeySecret) {
+      same.config.accessKeySecret = config.accessKeySecret
+      same.config.stsToken = config.stsToken
+    }
+    return state
+  }
   let id = 'legacy-default'
   let index = 1
   while (state.accounts.some((account) => account.id === id)) id = `legacy-default-${index++}`
@@ -103,6 +111,18 @@ function metadataJson(state: AccountState): string {
         endpoint: config.endpoint,
         publicBaseUrl: config.publicBaseUrl,
       },
+    })),
+  })
+}
+
+// The native vault schema requires these fields, but their contents must never be persisted.
+function desktopMetadataJson(state: AccountState): string {
+  return JSON.stringify({
+    version: 1,
+    activeAccountId: state.activeAccountId,
+    accounts: state.accounts.map((account) => ({
+      ...account,
+      config: { ...account.config, accessKeySecret: '', stsToken: '' },
     })),
   })
 }
@@ -149,7 +169,8 @@ export async function loadAccounts(): Promise<AccountState> {
     } catch {
       throw new Error('无法解密或读取本机账号库。请确认使用原 Windows 用户，并检查文件权限；原数据未覆盖。')
     }
-    let state = raw === null ? emptyState() : readState(raw, true)
+    // Never restore old vault credentials after a restart. Current-session values remain usable.
+    let state = withSessionCredentials(raw === null ? emptyState() : readState(raw, false))
     if (legacyRaw !== null) {
       let legacy: OssConfig
       try {
@@ -159,7 +180,7 @@ export async function loadAccounts(): Promise<AccountState> {
       }
       state = addLegacy(state, legacy)
       try {
-        await invoke('save_account_vault', { data: JSON.stringify(state) })
+        await invoke('save_account_vault', { data: desktopMetadataJson(state) })
       } catch {
         throw new Error('旧版账号迁移到加密账号库失败，原配置已保留。请检查文件权限后重新启动。')
       }
@@ -169,6 +190,7 @@ export async function loadAccounts(): Promise<AccountState> {
         warning = '账号已存入加密账号库，但旧版明文配置清理失败，请检查本机存储权限。'
       }
     }
+    rememberCredentials(state)
     return warning ? { ...state, storageWarning: warning } : state
   }
 
@@ -213,10 +235,11 @@ export async function saveAccounts(state: AccountState): Promise<void> {
   const normalized = readState(JSON.stringify(state), true)
   if (isTauri()) {
     try {
-      await invoke('save_account_vault', { data: JSON.stringify(normalized) })
+      await invoke('save_account_vault', { data: desktopMetadataJson(normalized) })
     } catch {
       throw new Error('账号保存失败。请检查本机加密账号库的文件权限后重试。')
     }
+    rememberCredentials(normalized)
     return
   }
   try {

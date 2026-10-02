@@ -58,6 +58,24 @@ async function select(id: string) {
 }
 
 describe('account profile dialog', () => {
+  it.each(['http://oss-cn-beijing.aliyuncs.com', 'https://user:password@example.test', 'https://example.test/path'])('rejects unsafe endpoints before saving %s', async (endpoint) => {
+    const { events } = mount()
+    await fill('OSS Endpoint', endpoint)
+    button('仅保存').click()
+    await nextTick()
+    expect(events.save).not.toHaveBeenCalled()
+    expect(events.connect).not.toHaveBeenCalled()
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('HTTPS')
+    expect(document.querySelector('[role="alert"]')?.textContent).not.toContain('password')
+  })
+  it('rejects unsafe public addresses before saving an account', async () => {
+    const { events } = mount()
+    await fill('公共访问基础地址', 'http://cdn.example.test')
+    button('仅保存').click()
+    await nextTick()
+    expect(events.save).not.toHaveBeenCalled()
+    expect(document.querySelector('[role="alert"]')?.textContent).toContain('HTTPS')
+  })
   it('edits a failed switch target while labeling only the actual connected account', () => {
     const { props } = mount({ activeAccountId: 'a', initialSelectedAccountId: 'b' })
     props.error = '模拟连接失败'

@@ -10,6 +10,7 @@
     "shell:allow-open",
     "dialog:default",
     "fs:default",
+    "fs:allow-write-file",
     "core:window:allow-minimize",
     "core:window:allow-toggle-maximize",
     "core:window:allow-close",

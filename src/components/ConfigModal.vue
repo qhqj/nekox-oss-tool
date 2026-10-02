@@ -2,7 +2,7 @@
 import { computed, reactive, ref, watch } from 'vue'
 import { isTauri } from '@tauri-apps/api/core'
 import type { OssAccount } from '../types/accounts'
-import { applyParsedOssHost } from '../utils/oss-config'
+import { applyParsedOssHost, normalizeHttpsUrl } from '../utils/oss-config'
 import { canAutoConnect, createInitialConfig } from '../utils/config-storage'
 
 const props = defineProps<{
@@ -128,6 +128,13 @@ function submit(connect: boolean) {
     formError.value = '请填写账号名称，便于在列表中区分。'
     return
   }
+  try {
+    form.config.endpoint = normalizeHttpsUrl(form.config.endpoint, 'OSS Endpoint')
+    form.config.publicBaseUrl = normalizeHttpsUrl(form.config.publicBaseUrl, '公共访问基础地址', true)
+  } catch (error) {
+    formError.value = error instanceof Error ? error.message : '请检查 HTTPS 地址。'
+    return
+  }
   tryParseHostInput(form.config.bucket)
   tryParseHostInput(form.config.region)
   tryParseHostInput(form.config.endpoint)
@@ -164,7 +171,7 @@ function removeAccount() {
       </header>
 
       <div class="security-note">
-        <template v-if="desktop">Windows 桌面版使用当前 Windows 用户的系统加密保存凭证。</template>
+        <template v-if="desktop">Windows 桌面版使用系统加密保存账号资料；Secret 和 STS Token 仅在本次会话保留，重启后需重新输入。</template>
         <template v-else>网页版只保存账号资料；Secret 和 STS Token 仅在本次页面会话保留，刷新或重启后需重新输入。</template>
         长期 AccessKey 适用于本地 / 内网兼容使用，公网使用优先配置 STS 临时凭证。
       </div>
