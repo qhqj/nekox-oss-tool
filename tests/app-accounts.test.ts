@@ -47,6 +47,36 @@ beforeEach(() => {
 })
 
 describe('account and upload isolation', () => {
+  it('ignores repeated download clicks and profile changes until cancellation finishes', async () => {
+    mocks.desktop = true
+    let finish!: (value: { status: 'cancelled' }) => void
+    mocks.download.mockImplementationOnce(() => new Promise((resolve) => { finish = resolve }))
+    const wrapper = start(); await flushPromises()
+    const download = wrapper.findAll('button').find((button) => button.text() === '下载')!
+    await download.trigger('click'); await download.trigger('click')
+    expect(mocks.download).toHaveBeenCalledOnce()
+    const options = mocks.download.mock.calls[0][2]
+    await wrapper.findAll('button').find((button) => button.text() === '取消下载')!.trigger('click')
+    expect(options.signal.aborted).toBe(true)
+    wrapper.findComponent({ name: 'ConfigModal' }).vm.$emit('connect', account('b'))
+    await flushPromises(); expect(mocks.connect).toHaveBeenCalledOnce()
+    finish({ status: 'cancelled' }); await flushPromises()
+    expect(wrapper.get('#account-switch').attributes('disabled')).toBeUndefined()
+    expect(wrapper.findAll('button').some((button) => button.text() === '取消下载')).toBe(false)
+    wrapper.unmount()
+  })
+  it('ignores repeated profile connection requests while the first is pending', async () => {
+    const wrapper = start(); await flushPromises()
+    let finish!: () => void
+    mocks.connect.mockImplementationOnce(() => new Promise<void>((resolve) => { finish = resolve }))
+    const modal = wrapper.findComponent({ name: 'ConfigModal' })
+    modal.vm.$emit('connect', account('b')); modal.vm.$emit('connect', account('b'))
+    await flushPromises(); expect(mocks.connect).toHaveBeenCalledTimes(2)
+    expect(mocks.save).toHaveBeenCalledOnce()
+    finish(); await flushPromises()
+    expect(mocks.save).toHaveBeenCalledTimes(2); expect(wrapper.get('#account-switch').element.value).toBe('b')
+    wrapper.unmount()
+  })
   it('accepts same-account upload credential replacement in memory without saving or reconnecting', async () => {
     const wrapper = start(); await flushPromises()
     await wrapper.findAll('button').find((button) => button.text() === '上传文件 / 文件夹')!.trigger('click')

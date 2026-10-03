@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
+import { useModalFocus } from '../utils/modal-focus'
 
 const props = defineProps<{
   open: boolean
@@ -14,6 +15,8 @@ const emit = defineEmits<{
 
 const loading = ref(false)
 const imageError = ref('')
+const dialog = ref<HTMLElement | null>(null)
+useModalFocus(() => props.open, dialog, () => emit('close'))
 
 watch(
   () => [props.open, props.url, props.error] as const,
@@ -35,7 +38,7 @@ function onImageError() {
 
 <template>
   <div v-if="open" class="modal-mask preview-mask">
-    <section class="preview-card" role="dialog" aria-modal="true" :aria-label="`${name} 预览`">
+    <section ref="dialog" class="preview-card" role="dialog" aria-modal="true" :aria-label="`${name} 预览`" tabindex="-1">
       <header class="preview-header">
         <div>
           <h2>{{ name }}</h2>

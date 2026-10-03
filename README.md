@@ -38,6 +38,8 @@ Endpoint 和公共访问基础地址仅接受 HTTPS；省略协议的域名会�
 
 账号切换和目录切换在上传弹窗打开期间锁定。移除账号只删除本机配置，不会删除 Bucket 中的对象。
 
+弹窗打开后焦点进入弹窗，Tab / Shift+Tab 在最上层弹窗内循环，退出后回到入口。Escape 关闭空闲弹窗；上传中或同名确认时先暂停并保留队列，重新按一次才关闭；长按不会连续关闭。账号连接处理中不能退出。同名确认默认聚焦“自动重命名”，不会因打开弹窗而默认选择覆盖。
+
 桌面端仍通过 WebView 直接请求 OSS，因此 Bucket 可能需要配置 CORS。发生跨域错误时，按应用错误提示中的实际 Origin 设置允许来源；允许所需 GET / PUT / POST / HEAD、请求头，以及暴露 `ETag`、`x-oss-request-id` 等响应头。按实际上传方式为专用 RAM 身份配置目标 Bucket 的列表、读取、写入及所需分片操作权限。
 
 同名检测仅使用 ListObjectsV2，不额外读取对象内容。未选择覆盖时上传附带 `x-oss-forbid-overwrite`；普通 Bucket 可借此拒绝检测后的并发覆盖。**OSS 在已开启或暂停版本控制的 Bucket 中会忽略此请求头**，因此这些 Bucket 的并发同名保护仍有局限。参见 [阿里云同名覆盖说明](https://help.aliyun.com/zh/oss/developer-reference/prevent-objects-from-being-overwritten-by-objects-with-the-same-names)。选择覆盖会写入用户确认的同名 Key。

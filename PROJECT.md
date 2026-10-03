@@ -24,3 +24,4 @@
 - Checkpoint timeout recovery is limited to one automatic attempt within the five-write budget; no remote multipart DELETE or additional RAM permissions
 - Cancelled server-accepted writes cannot be rolled back; remote incomplete parts may remain and incur costs; live OSS/CORS cancellation is unverified
 - Opt-in isolated Windows desktop tests run the real Tauri WebView, installed SDK and native commands with synthetic transport, account storage and downloads on D:; ordinary builds/tests do not start the test executable
+- Existing dialogs isolate background navigation, trap focus only in the top dialog and restore entry focus; Escape closes idle dialogs or pauses uploads, and held Escape preserves paused queues

@@ -4,6 +4,7 @@ import type { OssBrowserService } from '../services/oss'
 import { formatBytes, validateUploadFileName, validateUploadRelativePath } from '../utils/file'
 import { abortable, isCredentialFailure, UploadSession, UploadStoppedError } from '../utils/upload'
 import type { ConflictAction, UploadCredentials, UploadQueueItem, UploadStatus } from '../utils/upload'
+import { useModalFocus } from '../utils/modal-focus'
 
 const props = defineProps<{
   open: boolean
@@ -43,6 +44,10 @@ let queueService = props.service
 let queuePrefix = props.prefix
 let nextId = 0
 let conflictResolver: ((action: ConflictAction | null) => void) | null = null
+const dialog = ref<HTMLElement | null>(null)
+const conflictDialog = ref<HTMLElement | null>(null)
+useModalFocus(() => props.open, dialog, () => { if (running.value) requestStop(); else emit('close') })
+useModalFocus(() => props.open && Boolean(conflictKey.value), conflictDialog, requestStop)
 
 const counts = computed(() => {
   const result: Record<UploadStatus, number> = { pending: 0, uploading: 0, success: 0, failed: 0, skipped: 0 }
@@ -226,7 +231,7 @@ function updateCredentials() {
 
 <template>
   <div v-if="open" class="modal-mask">
-    <section class="modal-card upload-modal" role="dialog" aria-modal="true" aria-labelledby="upload-title">
+    <section ref="dialog" class="modal-card upload-modal" role="dialog" aria-modal="true" aria-labelledby="upload-title" tabindex="-1">
       <header class="modal-header">
         <div class="modal-heading">
           <div class="modal-icon">↑</div>
@@ -240,8 +245,8 @@ function updateCredentials() {
 
       <div class="upload-content">
         <div class="pick-actions">
-          <input :key="`files-${inputKey}`" ref="fileInput" class="hidden-picker" type="file" multiple :disabled="running" @change="addFiles($event, false)" />
-          <input :key="`folder-${inputKey}`" ref="folderInput" class="hidden-picker" type="file" webkitdirectory multiple :disabled="running" @change="addFiles($event, true)" />
+          <input :key="`files-${inputKey}`" ref="fileInput" class="hidden-picker" type="file" hidden multiple :disabled="running" @change="addFiles($event, false)" />
+          <input :key="`folder-${inputKey}`" ref="folderInput" class="hidden-picker" type="file" hidden webkitdirectory multiple :disabled="running" @change="addFiles($event, true)" />
           <button class="secondary-button" type="button" :disabled="running" @click="fileInput?.click()">＋ 选择多个文件</button>
           <button class="secondary-button" type="button" :disabled="running || !folderSupported" @click="folderInput?.click()">＋ 选择文件夹</button>
           <span>{{ queue.length }} 个文件 · {{ formatBytes(totalBytes) }}</span>
@@ -299,7 +304,7 @@ function updateCredentials() {
     </section>
 
     <div v-if="conflictKey" class="conflict-mask">
-      <section class="conflict-card" role="alertdialog" aria-modal="true" aria-labelledby="conflict-title" aria-describedby="conflict-description">
+      <section ref="conflictDialog" class="conflict-card" role="alertdialog" aria-modal="true" aria-labelledby="conflict-title" aria-describedby="conflict-description" tabindex="-1">
         <h3 id="conflict-title">目标位置已有同名文件</h3>
         <code>/{{ conflictKey }}</code>
         <p id="conflict-description">请选择如何处理。覆盖会替换此 Object Key 当前对应的内容。</p>
@@ -307,7 +312,7 @@ function updateCredentials() {
         <div class="conflict-actions">
           <button class="danger-button" type="button" @click="chooseConflict('overwrite')">覆盖</button>
           <button class="secondary-button" type="button" @click="chooseConflict('skip')">不上传</button>
-          <button class="primary-button" type="button" autofocus @click="chooseConflict('rename')">自动重命名</button>
+          <button class="primary-button" type="button" data-dialog-initial-focus @click="chooseConflict('rename')">自动重命名</button>
         </div>
         <button class="pause-conflict" type="button" @click="requestStop">暂停队列，稍后决定</button>
       </section>

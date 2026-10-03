@@ -34,6 +34,8 @@ Windows stores nonsecret account metadata in `accounts-v1.dpapi`, encrypted with
 
 Web development previews persist only nonsecret profile metadata; Secret and STS Token remain in the current page session and must be reentered after refresh. Long-lived AccessKey connections are intended for trusted local/intranet use; public deployments should use STS. Removing an account only removes local settings, never OSS objects. Account and directory switching are locked while an upload dialog is open.
 
+Opening a dialog moves focus inside it. Tab/Shift+Tab stay in the top dialog, and closing restores the entry control. Escape closes an idle dialog; during upload or a conflict prompt it pauses and preserves the queue. Press Escape again to close after pausing; holding it does not discard the queue. Account connection blocks exit until it finishes. Conflict prompts initially focus automatic rename, without selecting overwrite.
+
 Endpoint and public base URL must use HTTPS; bare hostnames are normalized to HTTPS. Endpoints accept no path; public URLs may contain a CDN path prefix. Both reject URL credentials, query parameters and fragments. No Bucket CORS or RAM permissions are changed automatically.
 
 OSS requests originate directly from the WebView, so Bucket CORS settings may still be required. Allow the actual Origin reported in connection errors, the required GET / PUT / POST / HEAD methods and request headers, and expose response headers such as `ETag` and `x-oss-request-id`. Give a dedicated RAM identity only the necessary Bucket listing, read, write and multipart permissions for your upload workflow.

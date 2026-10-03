@@ -66,6 +66,11 @@ function button(label: string): HTMLButtonElement {
   if (!element) throw new Error('Test button missing')
   return element
 }
+function key(value: string, shiftKey = false, repeat = false) {
+  const event = new KeyboardEvent('keydown', { key: value, shiftKey, repeat, bubbles: true, cancelable: true })
+  document.activeElement!.dispatchEvent(event)
+  return event
+}
 async function run() {
   await record('actual-tauri-webview', isTauri())
   const initial = await invoke<{ reloaded: boolean }>('get_test_state')
@@ -88,7 +93,17 @@ async function run() {
   await record('isolated-browser-storage-no-credentials', !Object.keys(localStorage).some((key) => /synthetic-session-(secret|token)/.test(localStorage.getItem(key) ?? '')))
   const app = createApp(App); app.mount('#app')
   await wait(() => !button('上传文件 / 文件夹').disabled)
-  button('上传文件 / 文件夹').click(); await nextTick()
+  const accountTrigger = button('账号'); accountTrigger.focus(); accountTrigger.click(); await nextTick()
+  const accountDialog = document.querySelector<HTMLElement>('.config-card')!
+  await record('account-dialog-focus-and-isolation', accountDialog.contains(document.activeElement) && document.querySelector('.workspace')!.hasAttribute('inert'))
+  const first = accountDialog.querySelector<HTMLButtonElement>('button')!, last = accountDialog.querySelector<HTMLButtonElement>('button[type=submit]')!
+  last.focus(); const tab = key('Tab'); const forward = document.activeElement === first
+  key('Tab', true)
+  await record('account-dialog-tab-cycle', tab.defaultPrevented && forward && document.activeElement === last)
+  key('Escape'); await nextTick()
+  await record('account-dialog-focus-restored', !document.querySelector('.config-card') && document.activeElement === accountTrigger && !document.querySelector('.workspace')!.hasAttribute('inert'))
+  const uploadTrigger = button('上传文件 / 文件夹'); uploadTrigger.focus(); uploadTrigger.click(); await nextTick()
+  await record('upload-dialog-focus-and-isolation', document.querySelector('.upload-modal')!.contains(document.activeElement) && document.querySelector('.workspace')!.hasAttribute('inert'))
   const picker = document.querySelector<HTMLInputElement>('input[type=file]')!
   const transfer = new DataTransfer(); transfer.items.add(new File([new Uint8Array(8 * 1024 * 1024)], 'large.bin'))
   picker.files = transfer.files; picker.dispatchEvent(new Event('change', { bubbles: true })); await nextTick()
@@ -96,15 +111,19 @@ async function run() {
   await wait(() => !!document.querySelector('.progress-bar') && document.body.textContent!.includes('本次会话已有分片记录'))
   await record('upload-locks-account', document.querySelector<HTMLSelectElement>('#account-switch')!.disabled)
   await invoke('stage', { name: 'upload-view' }); await pause(600)
-  button('暂停当前上传').click()
+  key('Escape')
   await wait(() => !document.querySelector('.progress-bar'))
   await record('current-upload-aborted', counts.aborts > 0 && document.body.textContent!.includes('等待 1'))
+  key('Escape', false, true); await nextTick()
+  await record('held-escape-preserves-paused-queue', !!document.querySelector('.upload-modal') && document.querySelectorAll('.queue-item').length === 1)
   holdUpload = false
   button('继续上传').click()
   await wait(() => !!document.querySelector('.item-result code'))
   await pause(250)
   await record('resume-skips-saved-part-and-init', counts.init === 1 && counts.part1 === 1)
   await record('late-upload-response-isolated', counts.late === 1 && document.querySelector('.item-result code')!.textContent === '/large.bin' && document.body.textContent!.includes('成功 1'))
+  key('Escape'); await nextTick()
+  await record('upload-dialog-focus-restored', !document.querySelector('.upload-modal') && document.activeElement === uploadTrigger && !document.querySelector('.workspace')!.hasAttribute('inert'))
   app.unmount()
 
   let signatures = 0

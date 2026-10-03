@@ -4,6 +4,7 @@ import { isTauri } from '@tauri-apps/api/core'
 import type { OssAccount } from '../types/accounts'
 import { applyParsedOssHost, normalizeHttpsUrl } from '../utils/oss-config'
 import { canAutoConnect, createInitialConfig } from '../utils/config-storage'
+import { useModalFocus } from '../utils/modal-focus'
 
 const props = defineProps<{
   open: boolean
@@ -39,6 +40,8 @@ const parseHint = ref('')
 const formError = ref('')
 const confirmRemove = ref(false)
 const desktop = isTauri()
+const dialog = ref<HTMLElement | null>(null)
+useModalFocus(() => props.open, dialog, () => { if (!props.connecting) emit('close') })
 const savedAccount = computed(() => props.accounts.find((account) => account.id === form.id))
 const dirty = computed(() => !savedAccount.value || JSON.stringify(clone(form)) !== JSON.stringify(savedAccount.value))
 
@@ -158,7 +161,7 @@ function removeAccount() {
 
 <template>
   <div v-if="open" class="modal-mask">
-    <section class="modal-card config-card" role="dialog" aria-modal="true" aria-labelledby="account-dialog-title">
+    <section ref="dialog" class="modal-card config-card" role="dialog" aria-modal="true" aria-labelledby="account-dialog-title" tabindex="-1">
       <header class="modal-header">
         <div class="modal-heading">
           <div class="modal-icon">☁</div>
