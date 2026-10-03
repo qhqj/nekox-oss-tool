@@ -114,6 +114,12 @@ pub fn save_account_vault(app: tauri::AppHandle, data: String) -> Result<(), Str
     }
 }
 
+// Only compiled into Rust test targets. The normal application cannot override its vault path.
+#[cfg(all(test, windows, feature = "desktop-integration"))]
+pub fn load_test_vault(directory: &std::path::Path) -> Result<Option<String>, String> { windows::load(directory) }
+#[cfg(all(test, windows, feature = "desktop-integration"))]
+pub fn save_test_vault(directory: &std::path::Path, data: &str) -> Result<(), String> { windows::save(directory, data) }
+
 #[cfg(windows)]
 mod windows {
     use super::{validate, MAX_VAULT_BYTES};

@@ -50,7 +50,7 @@ checkpoint 仅留在本次弹窗内存中，不含凭据、不写磁盘或浏览
 
 上传客户端关闭 SDK 通用网络重试；SDK 对同一个请求的时钟偏差递归校准最多重试一次，仍失败则提示校准系统时间后手动重试。
 
-取消不能撤回已经被 OSS 接受的 PUT/分片完成请求，也不会删除成功对象或远端未完成分片；继续时若已出现同名对象仍按原冲突选择处理。没有调用 AbortMultipartUpload/DELETE 或增加 RAM 权限。未完成分片可能产生存储成本，关闭弹窗不代表服务器端清理完成；由用户按现有 OSS 策略自行处理。SDK 取消/续传流程已用模拟传输验证，真实 Bucket/CORS 与 WebView 中断行为仍待验收。参见 [ali-oss 取消与断点续传](https://github.com/ali-sdk/ali-oss#multipartuploadname-file-options)。
+取消不能撤回已经被 OSS 接受的 PUT/分片完成请求，也不会删除成功对象或远端未完成分片；继续时若已出现同名对象仍按原冲突选择处理。没有调用 AbortMultipartUpload/DELETE 或增加 RAM 权限。未完成分片可能产生存储成本，关闭弹窗不代表服务器端清理完成；由用户按现有 OSS 策略自行处理。SDK 取消/续传流程已在真实 Tauri WebView 中用合成传输验证，真实 Bucket/CORS 与物理网络中断仍待验收。参见 [ali-oss 取消与断点续传](https://github.com/ali-sdk/ali-oss#multipartuploadname-file-options)。
 
 Windows 下载先打开原生保存对话框；取消选择不会生成签名或发送 GET。请使用新文件名，即使系统对话框询问替换，应用也不会覆盖已有本地文件；下载期间出现同名目标时同样拒绝提交。选择成功后才生成 5 分钟签名 URL，通过 WebView 流式 GET 下载；每次最多 128 KiB 二进制 IPC，等磁盘写入后再继续读取，不调用完整 `arrayBuffer` 或创建整文件 Blob。网络/WebView 自身仍可能有缓冲；不宣称总进程内存固定。下载期间锁定账号，允许浏览目录，进度与取消按钮始终显示在列表上方。
 
@@ -77,6 +77,8 @@ npm run build:desktop
 NSIS 安装包位于 `src-tauri/target/release/bundle/nsis/`。本地交付副本与 SHA-256 位于 `install/`；此目录不提交 Git。`npm run dev` 仅用于前端开发预览。自动化测试使用模拟 OSS 请求及合成凭证，不代表真实 Bucket 联调。
 
 仅验证构建、避免读取本机 `.env` 时，运行 `npm run build -- --config tests/build.config.ts`。Vitest 也禁用 `.env` 加载。
+
+使用现有 Windows 工具链，可在 D 盘仓库运行 `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-desktop.ps1`，执行隔离的真实 Tauri/WebView 离线验收。合成账号库、浏览器配置、下载及临时文件均位于独立的 `test-results/desktop-<guid>`；不读取用户账号存储、不连接 OSS、不安装或发布程序。覆盖上传取消/恢复、晚回调隔离、会话凭据、原生保存取消零请求、分块下载、防覆盖及失败清理。仅操作测试进程自己的原生对话框，通常需在普通 Windows 用户桌面运行；不会修改持久系统策略。详见 [测试说明](tests/desktop/README.md)。
 
 Windows 也可运行 `powershell -ExecutionPolicy Bypass -File scripts/package-desktop.ps1`：自动发现项目本地 Rust（如存在）及已安装的 C++ 工具链，执行加密账号库测试、构建安装包并生成校验文件，不修改系统环境变量。仅验证原生账号库可追加 `-NativeTestsOnly`。
 

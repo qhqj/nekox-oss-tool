@@ -1,0 +1,9 @@
+{
+  "$schema": "../../node_modules/@tauri-apps/cli/config.schema.json",
+  "productName": "Nekox Offline Desktop Test",
+  "version": "0.2.0",
+  "identifier": "com.nekox.oss-tool.offline-test",
+  "build": { "frontendDist": "../../test-results/desktop-assets" },
+  "app": { "windows": [], "security": { "csp": "default-src 'self' http://tauri.localhost; connect-src 'self' ipc: http://ipc.localhost; img-src 'self' asset: http://asset.localhost; style-src 'self' 'unsafe-inline'; script-src 'self' 'unsafe-inline'", "capabilities": ["default"] } },
+  "bundle": { "active": false, "icon": ["../../src-tauri/icons/icon.ico"] }
+}

@@ -1,5 +1,15 @@
 # ERROR.md
 
+## 2026-10-03 — 隔离桌面集成测试启动
+
+- **现象**：Cargo 桌面集成测试程序在入口执行前以 `0xC0000139` 退出；正常 Tauri 产品程序含 Common Controls v6 manifest，测试程序不含该资源。
+- **根因**：Cargo 集成测试可执行文件不继承 Tauri 正常程序的 Windows resource/manifest；原生对话框所需 Common Controls 导入因此未正确绑定。该失败属于测试目标构建配置，不是需要给用户安装组件的产品故障。
+- **修复**：仅在 Windows 且显式 `desktop-integration` 特性启用时设置测试链接 manifest；权限为 `asInvoker`、`uiAccess=false`。没有修改正常产品链接、DLL、系统组件或安全策略。
+- **隔离环境**：执行沙箱内 WebView 未加载页面且合成 DPAPI 测试失败；普通 Windows 用户进程环境通过。不改用户 profile，不切管理员身份；账户库、WebView profile、下载和临时数据全部定向独立 D 盘测试目录。
+- **传输边界**：合成 fetch 必须保留精确本地 Tauri IPC 的 POST，否则原始二进制 IPC 也被拦截。其余请求继续拒绝或合成；不放开远端网络。
+- **对话框驱动**：Windows 替换提示可位于保存窗口 UIAutomation 树中；用测试 PID 限定的窗口树与 InvokePattern 处理，不依赖父窗口可见性、不反复激活窗口。仅允许本轮 `existing.bin` 夹具，实际原生提交仍拒绝覆盖。
+- **验证**：最终当前源码全量重建，23 条真实 Tauri/WebView 离线报告通过；176 项前端及 10 项原生回归、默认产品 cargo check 和无 `.env` 前端构建通过。未运行产品安装程序或连接真实 OSS。
+
 用于记录开发过程中真正影响实现的错误、根因与最终修复，避免 Agent 重复试错。
 
 ## 记录模板

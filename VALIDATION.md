@@ -1,5 +1,32 @@
 # 0.2.0 本地验证记录
 
+## 2026-10-03 第四里程碑：隔离桌面离线集成验收
+
+基于第三里程碑 `4892c9b`，新增显式启用的 Windows Cargo 集成测试目标，实际运行 Tauri/WebView2、Vue App、已安装 ali-oss Browser SDK 及原生下载/DPAPI 实现。生产应用版本保持 0.2.0；未安装、覆盖用户应用或发布 Release，也未访问真实 OSS、账号库、localStorage、`.env`，未安装工具链或修改 Bucket/CORS/RAM、系统组件、安全策略。
+
+每轮使用独立 D 盘 `test-results/desktop-<guid>`，包含测试 WebView profile、合成账号库、下载夹具和 TEMP/TMP。原生路径替换仅编译到测试目标；普通 Cargo 测试和产品构建不会启动该程序。远端 fetch/XHR 全部合成或拒绝，仅本地 Tauri IPC 保留；测试 CSP 也不允许外部连接。自动操作仅限测试 PID 的原生窗口，不使用全局键盘事件或屏幕捕获。
+
+最终当前源码全量重建运行：`test-results/desktop-c6f755dd1d4c469fbceddac639c03d42/results.jsonl`，23 条报告全部通过（22 个独立用例名；实际 Tauri 检查在页面重载后重复一次），阶段为 `done`，进程退出码 0，全程无需人工处理对话框。运行命令及证据格式见 `tests/desktop/README.md`。
+
+- 上传实际渲染且账号锁定；暂停中断合成在途请求；恢复不重发已保存分片、不重新初始化；故意晚到的旧分片响应不会修改最终结果。
+- 当前会话可用合成凭据；独立 DPAPI 库的 Secret/STS 字段为空；测试浏览器存储无凭据；实际重载页面后不恢复凭据。
+- 原生保存取消与已有目标拒绝均不签名、不 GET；下载通过实际二进制 IPC 分块写入；流失败和取消确实发生在已写入字节之后。
+- 每块不超过 128 KiB，最终保存长度与字节模式一致；失败/取消无最终文件、无本轮临时文件；已有及下载中创建的目标均保持原字节。
+
+| 检查 | 结果 |
+| --- | --- |
+| `powershell -NoProfile -ExecutionPolicy Bypass -File scripts/test-desktop.ps1` | 当前源码重建；23 条桌面报告通过 |
+| `npm test` | 11 个文件，176 项通过 |
+| `npm run typecheck` | 通过 |
+| `npm run build -- --config tests/build.config.ts` | 通过，禁用 `.env` 加载；生产 JS 与第三里程碑相同，842.04 KB；原有分块警告保留 |
+| `cargo check --locked --offline --manifest-path src-tauri/Cargo.toml` | 默认产品目标通过，不启用桌面测试 |
+| `cargo test --locked --offline --manifest-path src-tauri/Cargo.toml --lib` | D 盘合成临时数据，普通 Windows 用户环境下 10 项通过 |
+| `git diff --check` | 通过 |
+
+测试程序的入口点失败 `0xC0000139` 来自缺失 Common Controls v6 manifest；正常 Tauri 产品已有对应资源。仅测试链接添加 manifest 后可用现有工具链启动，无需安装 DLL、系统组件或管理员权限。受限执行沙箱内 WebView 未加载页面，DPAPI 加密测试失败；改在已授权的普通 Windows 用户进程环境运行通过，未降低系统安全设置。测试对话框驱动以测试 PID 的 UIAutomation 窗口树处理嵌套替换提示，拒绝覆盖由实际产品原生命令验证。
+
+未验证：真实 OSS/CORS/物理网络断线、真实 STS 过期、超大文件峰值内存/吞吐、其他 Windows 版本或文件系统、网络盘、产品安装升级及视觉/读屏可访问性。当前测试使用 8 MiB 上传及 384 KiB + 37 字节流；不据此宣称真实大文件性能。历史安装包及前面里程碑的未验证记录保持历史含义，本轮未生成安装包或触发发布。main 推送后的检查以远端实际 API 为准。
+
 日期：2026-09-12。仓库从 `https://github.com/qhqj/nekox-oss-tool.git` 克隆，起点提交 `8ca2a91`。此记录覆盖本地构建与验证，不代表 GitHub Release 发布记录。
 
 ## 已实现

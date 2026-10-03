@@ -22,4 +22,5 @@
 - Uploads use isolated abortable transports; checkpoint snapshots stay in dialog-session memory and bind to account/Bucket/target/File identity
 - Credential failure pauses the queue; manual same-account credential replacement keeps tasks without persistence, STS refresh calls or immediate network verification
 - Checkpoint timeout recovery is limited to one automatic attempt within the five-write budget; no remote multipart DELETE or additional RAM permissions
-- Cancelled server-accepted writes cannot be rolled back; remote incomplete parts may remain and incur costs; real OSS/WebView cancellation is unverified
+- Cancelled server-accepted writes cannot be rolled back; remote incomplete parts may remain and incur costs; live OSS/CORS cancellation is unverified
+- Opt-in isolated Windows desktop tests run the real Tauri WebView, installed SDK and native commands with synthetic transport, account storage and downloads on D:; ordinary builds/tests do not start the test executable

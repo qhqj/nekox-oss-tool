@@ -17,8 +17,14 @@ pub async fn begin_download(window: WebviewWindow, state: State<'_, Arc<Download
     let cleanup_id = id.clone(); let cleanup_owner = owner.clone();
     let downloads = Arc::clone(state.inner());
     let result = tauri::async_runtime::spawn_blocking(move || {
-        let selected = window.dialog().file().set_parent(&window).set_title("保存下载（请选择新文件名）")
-            .set_file_name(filename).blocking_save_file();
+        let picker = window.dialog().file().set_parent(&window).set_title("保存下载（请选择新文件名）")
+            .set_file_name(filename);
+        // Test targets start the real dialog in their own fixtures, never a user's recent folder.
+        #[cfg(test)]
+        let picker = if let Some(root) = std::env::var_os("NEKOX_DESKTOP_TEST_ROOT") {
+            picker.set_directory(std::path::PathBuf::from(root).join("downloads"))
+        } else { picker };
+        let selected = picker.blocking_save_file();
         let Some(selected) = selected else { return Ok(None); };
         let path = selected.into_path().map_err(|_| "保存位置无效。")?;
         downloads.attach(&owner, &id, FileSink::create(&path)?)?;

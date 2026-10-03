@@ -14,6 +14,15 @@ rust-version = "1.77.2"
 name = "nekox_oss_tool_lib"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[[test]]
+name = "desktop_offline"
+path = "../tests/desktop/native.rs"
+harness = false
+required-features = ["desktop-integration"]
+
+[features]
+desktop-integration = []
+
 [build-dependencies]
 tauri-build = { version = "2.6.3", features = [] }
 
